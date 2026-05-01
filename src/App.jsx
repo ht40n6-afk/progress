@@ -17,14 +17,49 @@ const defaultState = {
   entries: {},
 }
 
+function safeId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return `goal-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function normalizeGoal(rawGoal) {
+  if (typeof rawGoal === 'string') {
+    return {
+      id: safeId(),
+      name: rawGoal,
+      category: 'General',
+      description: '',
+      progress: 0,
+      target: 100,
+      status: 'Not started',
+    }
+  }
+
+  if (!rawGoal || typeof rawGoal !== 'object') return null
+
+  return {
+    id: rawGoal.id || safeId(),
+    name: rawGoal.name || 'Untitled goal',
+    category: rawGoal.category || 'General',
+    description: rawGoal.description || '',
+    progress: Number(rawGoal.progress) || 0,
+    target: Number(rawGoal.target) > 0 ? Number(rawGoal.target) : 100,
+    status: rawGoal.status || 'Not started',
+  }
+}
+
 function loadData() {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (!saved) return defaultState
 
   try {
     const parsed = JSON.parse(saved)
+    const normalizedGoals = Array.isArray(parsed.goals)
+      ? parsed.goals.map(normalizeGoal).filter(Boolean)
+      : []
+
     return {
-      goals: parsed.goals ?? [],
+      goals: normalizedGoals,
       entries: parsed.entries ?? {},
     }
   } catch {
@@ -50,7 +85,7 @@ function calculateEntryXP(entry) {
 
 function createEmptyGoal() {
   return {
-    id: crypto.randomUUID(),
+    id: safeId(),
     name: '',
     category: '',
     description: '',
@@ -108,6 +143,36 @@ function App() {
       [field]: [...todayEntry[field], value.trim()],
     })
     setValue('')
+  }
+
+  const saveGoal = () => {
+    if (!goalDraft.name.trim()) return
+    if (goalDraft.target <= 0) return
+
+    const nextGoals = isEditingGoal
+      ? data.goals.map((goal) => (goal.id === goalDraft.id ? goalDraft : goal))
+      : [...data.goals, goalDraft]
+
+    updateData({ ...data, goals: nextGoals })
+    setGoalDraft(createEmptyGoal())
+    setIsEditingGoal(false)
+  }
+
+  const editGoal = (goal) => {
+    setGoalDraft({ ...goal })
+    setIsEditingGoal(true)
+  }
+
+  const deleteGoal = (goalId) => {
+    updateData({
+      ...data,
+      goals: data.goals.filter((goal) => goal.id !== goalId),
+    })
+
+    if (goalDraft.id === goalId) {
+      setGoalDraft(createEmptyGoal())
+      setIsEditingGoal(false)
+    }
   }
 
   return (
