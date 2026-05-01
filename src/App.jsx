@@ -83,6 +83,55 @@ function calculateEntryXP(entry) {
   return achievementXP + gratitudeXP + goalNoteXP + moodEnergyXP + lessonXP
 }
 
+
+function calculateCurrentStreak(entries) {
+  const dates = new Set(Object.keys(entries))
+  let streak = 0
+  const current = new Date()
+
+  while (true) {
+    const dateKey = current.toISOString().split('T')[0]
+    if (!dates.has(dateKey)) {
+      if (streak === 0) {
+        current.setDate(current.getDate() - 1)
+        const yesterdayKey = current.toISOString().split('T')[0]
+        if (!dates.has(yesterdayKey)) return 0
+        streak += 1
+      } else {
+        break
+      }
+    } else {
+      streak += 1
+    }
+    current.setDate(current.getDate() - 1)
+  }
+
+  return streak
+}
+
+function calculateWeeklyXP(entries) {
+  const today = new Date()
+  const weekAgo = new Date()
+  weekAgo.setDate(today.getDate() - 6)
+
+  return Object.entries(entries).reduce((sum, [date, entry]) => {
+    const entryDate = new Date(`${date}T00:00:00`)
+    if (entryDate >= weekAgo && entryDate <= today) {
+      return sum + calculateEntryXP(entry)
+    }
+    return sum
+  }, 0)
+}
+
+function goalSummary(goals) {
+  if (!goals.length) return { completed: 0, total: 0, avg: 0 }
+  const completed = goals.filter((goal) => goal.status === 'Completed').length
+  const avg = Math.round(goals.reduce((sum, goal) => {
+    const percent = goal.target > 0 ? Math.min(100, (goal.progress / goal.target) * 100) : 0
+    return sum + percent
+  }, 0) / goals.length)
+  return { completed, total: goals.length, avg }
+}
 function createEmptyGoal() {
   return {
     id: safeId(),
@@ -120,6 +169,11 @@ function App() {
   }, [data.entries])
 
   const level = Math.floor(totalXP / 100) + 1
+  const xpInCurrentLevel = totalXP % 100
+  const xpToNextLevel = 100 - xpInCurrentLevel
+  const streak = calculateCurrentStreak(data.entries)
+  const weeklyXP = calculateWeeklyXP(data.entries)
+  const goalsOverview = goalSummary(data.goals)
 
   const updateData = (nextData) => {
     setData(nextData)
@@ -236,13 +290,17 @@ function App() {
 
             <section className="rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">3. Progress Dashboard</h2>
-              <div className="mt-4 space-y-2 text-sm">
-                <Stat label="Days Logged" value={Object.keys(data.entries).length} />
-                <Stat label="Total Achievements" value={sumCount(data.entries, 'achievements')} />
-                <Stat label="Total Gratitude Items" value={sumCount(data.entries, 'gratitude')} />
-                <Stat label="Total Goal Notes" value={sumCount(data.entries, 'goalNotes')} />
-                <Stat label="Average Mood" value={averageScore(data.entries, 'mood')} />
-                <Stat label="Average Energy" value={averageScore(data.entries, 'energy')} />
+              <div className="mt-4 grid gap-3 text-sm">
+                <DashboardCard title="Total XP" value={`${totalXP} XP`} />
+                <DashboardCard title="Current Level" value={`Level ${level}`} />
+                <DashboardCard title="XP Needed for Next Level" value={`${xpToNextLevel} XP`}>
+                  <ProgressBar percent={xpInCurrentLevel} />
+                </DashboardCard>
+                <DashboardCard title="Current Daily Logging Streak" value={`${streak} day(s)`} />
+                <DashboardCard title="Weekly XP Total" value={`${weeklyXP} XP`} />
+                <DashboardCard title="Goal Progress Summary" value={`${goalsOverview.completed}/${goalsOverview.total} completed`}>
+                  <ProgressBar percent={goalsOverview.avg} />
+                </DashboardCard>
               </div>
             </section>
 
@@ -324,6 +382,8 @@ function App() {
 function EntryInput({ label, value, setValue, onAdd, items, xpText }) { return <div><label className="mb-1 block font-medium">{label} ({xpText})</label><div className="flex gap-2"><input value={value} onChange={(e) => setValue(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" placeholder={`Add ${label.toLowerCase()}`} /><button onClick={onAdd} className="rounded-lg bg-slate-800 px-3 py-2 text-white">Add</button></div><ul className="mt-2 list-disc space-y-1 pl-6 text-sm">{items.map((item, index) => <li key={index}>{item}</li>)}</ul></div> }
 function ScoreInput({ label, value, onChange }) { return <div><label className="mb-1 block font-medium">{label} (1-10)</label><input type="range" min="1" max="10" value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full" /><p className="text-center text-sm">{value}</p></div> }
 function Stat({ label, value }) { return <div className="flex items-center justify-between rounded-lg bg-slate-100 px-3 py-2"><span>{label}</span><span className="font-semibold">{value}</span></div> }
+function DashboardCard({ title, value, children }) { return <div className="rounded-lg bg-slate-100 p-3"><p className="text-slate-600">{title}</p><p className="font-semibold">{value}</p>{children}</div> }
+function ProgressBar({ percent }) { return <div className="mt-2 h-2 w-full rounded-full bg-slate-200"><div className="h-2 rounded-full bg-indigo-500" style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div> }
 function sumCount(entries, field) { return Object.values(entries).reduce((sum, entry) => sum + entry[field].length, 0) }
 function averageScore(entries, field) { const values = Object.values(entries).map((entry) => entry[field]).filter(Boolean); if (!values.length) return '-'; return (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1) }
 
