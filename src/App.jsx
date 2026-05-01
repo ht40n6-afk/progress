@@ -62,6 +62,7 @@ function normalizeGoal(rawGoal) {
       currentProgress: 0,
       targetProgress: 100,
       status: 'Not started',
+      completedAt: null,
     }
   }
 
@@ -75,6 +76,7 @@ function normalizeGoal(rawGoal) {
     currentProgress: Number(rawGoal.currentProgress ?? rawGoal.progress) || 0,
     targetProgress: Number(rawGoal.targetProgress ?? rawGoal.target) > 0 ? Number(rawGoal.targetProgress ?? rawGoal.target) : 100,
     status: rawGoal.status || 'Not started',
+    completedAt: rawGoal.completedAt || null,
   }
 }
 
@@ -174,6 +176,7 @@ function createEmptyGoal() {
     currentProgress: 0,
     targetProgress: 100,
     status: 'Not started',
+    completedAt: null,
   }
 }
 
@@ -204,6 +207,8 @@ function App() {
   const streak = calculateCurrentStreak(data.entries)
   const weeklyXP = calculateWeeklyXP(data.entries)
   const goalsOverview = goalSummary(data.goals)
+  const activeGoals = data.goals.filter((goal) => goal.status !== 'Completed')
+  const completedGoals = data.goals.filter((goal) => goal.status === 'Completed')
 
   const updateData = (nextData) => {
     setData(nextData)
@@ -241,9 +246,11 @@ function App() {
     if (!goalDraft.name.trim()) return
     if (goalDraft.targetProgress <= 0) return
 
+    const normalizedDraft = { ...goalDraft, completedAt: goalDraft.status === 'Completed' ? (goalDraft.completedAt || selectedDate) : null }
+
     const nextGoals = isEditingGoal
-      ? data.goals.map((goal) => (goal.id === goalDraft.id ? goalDraft : goal))
-      : [...data.goals, goalDraft]
+      ? data.goals.map((goal) => (goal.id === normalizedDraft.id ? normalizedDraft : goal))
+      : [...data.goals, normalizedDraft]
 
     updateData({ ...data, goals: nextGoals })
     setGoalDraft(createEmptyGoal())
@@ -261,7 +268,18 @@ function App() {
       ...data,
       goals: data.goals.map((goal) => (
         goal.id === goalId
-          ? { ...goal, status: 'Completed', currentProgress: goal.targetProgress }
+          ? { ...goal, status: 'Completed', currentProgress: goal.targetProgress, completedAt: selectedDate }
+          : goal
+      )),
+    })
+  }
+
+  const restoreGoal = (goalId) => {
+    updateData({
+      ...data,
+      goals: data.goals.map((goal) => (
+        goal.id === goalId
+          ? { ...goal, status: 'In progress', completedAt: null }
           : goal
       )),
     })
@@ -336,7 +354,7 @@ function App() {
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.currentProgress} onChange={(e) => setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) })} />
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.targetProgress} onChange={(e) => setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) })} />
                 </div>
-                <select className="w-full rounded-lg border border-slate-300 p-2" value={goalDraft.status} onChange={(e) => setGoalDraft({ ...goalDraft, status: e.target.value })}>
+                <select className="w-full rounded-lg border border-slate-300 p-2" value={goalDraft.status} onChange={(e) => setGoalDraft({ ...goalDraft, status: e.target.value, completedAt: e.target.value === 'Completed' ? selectedDate : null })}>
                   <option>Not started</option>
                   <option>In progress</option>
                   <option>Completed</option>
@@ -349,7 +367,7 @@ function App() {
               </div>
 
               <div className="mt-4 space-y-3">
-                {data.goals.map((goal) => {
+                {activeGoals.map((goal) => {
                   const percent = goal.targetProgress > 0 ? Math.min(100, Math.round((goal.currentProgress / goal.targetProgress) * 100)) : 0
                   const isEditing = dashboardEditingGoalId === goal.id
                   return (
@@ -381,14 +399,32 @@ function App() {
                       <div className="mt-2 grid grid-cols-3 gap-2">
                         <input type="number" className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.currentProgress : goal.currentProgress} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, currentProgress: Number(e.target.value) } : g) })} />
                         <input type="number" className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.targetProgress : goal.targetProgress} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, targetProgress: Number(e.target.value) } : g) })} />
-                        <select className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.status : goal.status} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, status: e.target.value }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, status: e.target.value } : g) })}>
+                        <select className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.status : goal.status} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, status: e.target.value, completedAt: e.target.value === 'Completed' ? selectedDate : null }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, status: e.target.value, completedAt: e.target.value === 'Completed' ? selectedDate : null } : g) })}>
                           <option>Not started</option><option>In progress</option><option>Completed</option><option>Paused</option>
                         </select>
                       </div>
                     </div>
                   )
                 })}
-                {data.goals.length === 0 && <p className="text-slate-500">No goals yet. Create your first goal.</p>}              </div>
+                {activeGoals.length === 0 && <p className="text-slate-500">No active goals. Complete archive below.</p>}              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Completed Goals Archive</h2>
+              <div className="mt-4 space-y-3">
+                {completedGoals.map((goal) => (
+                  <div key={goal.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                    <p className="font-semibold">{goal.name}</p>
+                    <p className="text-slate-600">{goal.currentProgress}/{goal.targetProgress} • {goal.status}</p>
+                    <p className="text-slate-500">Completed: {goal.completedAt || 'Unknown'}</p>
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={() => restoreGoal(goal.id)} className="rounded bg-slate-200 px-2 py-1">Restore</button>
+                      <button onClick={() => deleteGoal(goal.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                    </div>
+                  </div>
+                ))}
+                {completedGoals.length === 0 && <p className="text-slate-500">No completed goals yet.</p>}
+              </div>
             </section>
 
             <section className="rounded-2xl bg-white p-6 shadow-sm">
@@ -444,7 +480,7 @@ function App() {
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.currentProgress} onChange={(e) => setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) })} />
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.targetProgress} onChange={(e) => setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) })} />
                 </div>
-                <select className="w-full rounded-lg border border-slate-300 p-2" value={goalDraft.status} onChange={(e) => setGoalDraft({ ...goalDraft, status: e.target.value })}>
+                <select className="w-full rounded-lg border border-slate-300 p-2" value={goalDraft.status} onChange={(e) => setGoalDraft({ ...goalDraft, status: e.target.value, completedAt: e.target.value === 'Completed' ? selectedDate : null })}>
                   <option>Not started</option>
                   <option>In progress</option>
                   <option>Completed</option>
@@ -457,7 +493,7 @@ function App() {
               </div>
 
               <div className="space-y-4">
-                {data.goals.map((goal) => {
+                {activeGoals.map((goal) => {
                   const percent = goal.targetProgress > 0 ? Math.min(100, Math.round((goal.currentProgress / goal.targetProgress) * 100)) : 0
                   return (
                     <div key={goal.id} className="rounded-xl border border-slate-200 p-4">
