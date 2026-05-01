@@ -284,53 +284,15 @@ function App() {
 
             <section className="rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">2. Goals</h2>
-              <p className="mt-2 text-sm text-slate-600">Create, edit, and update goals directly from your dashboard.</p>
-
-              <div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4">
-                <h3 className="font-semibold">{isEditingGoal ? 'Edit Goal' : 'Create Goal'}</h3>
-                <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Name" value={goalDraft.name} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} />
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.progress} onChange={(e) => setGoalDraft({ ...goalDraft, progress: Number(e.target.value) })} />
-                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.target} onChange={(e) => setGoalDraft({ ...goalDraft, target: Number(e.target.value) })} />
-                </div>
-                <select className="w-full rounded-lg border border-slate-300 p-2" value={goalDraft.status} onChange={(e) => setGoalDraft({ ...goalDraft, status: e.target.value })}>
-                  <option>Not started</option>
-                  <option>In progress</option>
-                  <option>Completed</option>
-                  <option>Paused</option>
-                </select>
-                <div className="flex gap-2">
-                  <button onClick={saveGoal} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{isEditingGoal ? 'Save Changes' : 'Add Goal'}</button>
-                  {isEditingGoal && <button onClick={() => { setGoalDraft(createEmptyGoal()); setIsEditingGoal(false) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {data.goals.map((goal) => {
-                  const percent = goal.target > 0 ? Math.min(100, Math.round((goal.progress / goal.target) * 100)) : 0
-                  return (
-                    <div key={goal.id} className="rounded-lg border border-slate-200 p-3 text-sm">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-semibold">{goal.name}</p>
-                          <p className="text-slate-600">{goal.progress}/{goal.target} • {goal.status}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => editGoal(goal)} className="rounded bg-slate-100 px-2 py-1">Edit</button>
-                          <button onClick={() => deleteGoal(goal.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
-                        </div>
-                      </div>
-                      <ProgressBar percent={percent} />
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <input type="number" className="w-full rounded border border-slate-300 p-1" value={goal.progress} onChange={(e) => updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, progress: Number(e.target.value) } : g) })} />
-                        <select className="w-full rounded border border-slate-300 p-1" value={goal.status} onChange={(e) => updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, status: e.target.value } : g) })}>
-                          <option>Not started</option><option>In progress</option><option>Completed</option><option>Paused</option>
-                        </select>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+              <p className="mt-2 text-sm text-slate-600">Use the Goals Page to create and manage your goals.</p>
+              <ul className="mt-4 space-y-2">
+                {data.goals.slice(0, 4).map((goal) => (
+                  <li key={goal.id} className="rounded-lg bg-slate-100 p-3 text-sm">
+                    <p className="font-semibold">{goal.name}</p>
+                    <p className="text-slate-600">{goal.progress}/{goal.target} • {goal.status}</p>
+                  </li>
+                ))}
+              </ul>
             </section>
 
             <section className="rounded-2xl bg-white p-6 shadow-sm">
@@ -384,6 +346,7 @@ function App() {
                   <option>In progress</option>
                   <option>Completed</option>
                   <option>Paused</option>
+                  <option>On hold</option>
                 </select>
                 <div className="flex gap-2">
                   <button onClick={saveGoal} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{isEditingGoal ? 'Save Changes' : 'Add Goal'}</button>
