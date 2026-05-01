@@ -29,8 +29,8 @@ function normalizeGoal(rawGoal) {
       name: rawGoal,
       category: 'General',
       description: '',
-      progress: 0,
-      target: 100,
+      currentProgress: 0,
+      targetProgress: 100,
       status: 'Not started',
     }
   }
@@ -42,8 +42,8 @@ function normalizeGoal(rawGoal) {
     name: rawGoal.name || 'Untitled goal',
     category: rawGoal.category || 'General',
     description: rawGoal.description || '',
-    progress: Number(rawGoal.progress) || 0,
-    target: Number(rawGoal.target) > 0 ? Number(rawGoal.target) : 100,
+    currentProgress: Number(rawGoal.currentProgress ?? rawGoal.progress) || 0,
+    targetProgress: Number(rawGoal.targetProgress ?? rawGoal.target) > 0 ? Number(rawGoal.targetProgress ?? rawGoal.target) : 100,
     status: rawGoal.status || 'Not started',
   }
 }
@@ -127,7 +127,7 @@ function goalSummary(goals) {
   if (!goals.length) return { completed: 0, total: 0, avg: 0 }
   const completed = goals.filter((goal) => goal.status === 'Completed').length
   const avg = Math.round(goals.reduce((sum, goal) => {
-    const percent = goal.target > 0 ? Math.min(100, (goal.progress / goal.target) * 100) : 0
+    const percent = goal.targetProgress > 0 ? Math.min(100, (goal.currentProgress / goal.targetProgress) * 100) : 0
     return sum + percent
   }, 0) / goals.length)
   return { completed, total: goals.length, avg }
@@ -138,8 +138,8 @@ function createEmptyGoal() {
     name: '',
     category: '',
     description: '',
-    progress: 0,
-    target: 100,
+    currentProgress: 0,
+    targetProgress: 100,
     status: 'Not started',
   }
 }
@@ -152,6 +152,8 @@ function App() {
   const [achievementInput, setAchievementInput] = useState('')
   const [gratitudeInput, setGratitudeInput] = useState('')
   const [goalNoteInput, setGoalNoteInput] = useState('')
+
+  const [dashboardEditingGoalId, setDashboardEditingGoalId] = useState(null)
 
   const today = todayString()
 
@@ -208,7 +210,7 @@ function App() {
 
   const saveGoal = () => {
     if (!goalDraft.name.trim()) return
-    if (goalDraft.target <= 0) return
+    if (goalDraft.targetProgress <= 0) return
 
     const nextGoals = isEditingGoal
       ? data.goals.map((goal) => (goal.id === goalDraft.id ? goalDraft : goal))
@@ -284,15 +286,63 @@ function App() {
 
             <section className="rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">2. Goals</h2>
-              <p className="mt-2 text-sm text-slate-600">Use the Goals Page to create and manage your goals.</p>
-              <ul className="mt-4 space-y-2">
-                {data.goals.slice(0, 4).map((goal) => (
-                  <li key={goal.id} className="rounded-lg bg-slate-100 p-3 text-sm">
-                    <p className="font-semibold">{goal.name}</p>
-                    <p className="text-slate-600">{goal.progress}/{goal.target} • {goal.status}</p>
-                  </li>
-                ))}
-              </ul>
+              <p className="mt-2 text-sm text-slate-600">Create, edit, and update goals directly from your dashboard.</p>
+
+              <div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4">
+                <h3 className="font-semibold">{isEditingGoal ? 'Edit Goal' : 'Create Goal'}</h3>
+                <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Name" value={goalDraft.name} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} />
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.currentProgress} onChange={(e) => setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) })} />
+                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.targetProgress} onChange={(e) => setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) })} />
+                </div>
+                <select className="w-full rounded-lg border border-slate-300 p-2" value={goalDraft.status} onChange={(e) => setGoalDraft({ ...goalDraft, status: e.target.value })}>
+                  <option>Not started</option>
+                  <option>In progress</option>
+                  <option>Completed</option>
+                  <option>Paused</option>
+                </select>
+                <div className="flex gap-2">
+                  <button onClick={saveGoal} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{isEditingGoal ? 'Save Changes' : 'Add Goal'}</button>
+                  {isEditingGoal && <button onClick={() => { setGoalDraft(createEmptyGoal()); setIsEditingGoal(false) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {data.goals.map((goal) => {
+                  const percent = goal.targetProgress > 0 ? Math.min(100, Math.round((goal.currentProgress / goal.targetProgress) * 100)) : 0
+                  const isEditing = dashboardEditingGoalId === goal.id
+                  return (
+                    <div key={goal.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="w-full">
+                          {isEditing ? (
+                            <input className="w-full rounded border border-slate-300 p-1" value={goalDraft.name} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} />
+                          ) : (
+                            <p className="font-semibold">{goal.name}</p>
+                          )}
+                          <p className="text-slate-600">{goal.currentProgress}/{goal.targetProgress} • {goal.status}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          {isEditing ? (
+                            <button onClick={() => { saveGoal(); setDashboardEditingGoalId(null) }} className="rounded bg-indigo-600 px-2 py-1 text-white">Save</button>
+                          ) : (
+                            <button onClick={() => { editGoal(goal); setDashboardEditingGoalId(goal.id) }} className="rounded bg-slate-100 px-2 py-1">Edit</button>
+                          )}
+                          <button onClick={() => deleteGoal(goal.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                        </div>
+                      </div>
+                      <ProgressBar percent={percent} />
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        <input type="number" className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.currentProgress : goal.currentProgress} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, currentProgress: Number(e.target.value) } : g) })} />
+                        <input type="number" className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.targetProgress : goal.targetProgress} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, targetProgress: Number(e.target.value) } : g) })} />
+                        <select className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.status : goal.status} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, status: e.target.value }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, status: e.target.value } : g) })}>
+                          <option>Not started</option><option>In progress</option><option>Completed</option><option>Paused</option>
+                        </select>
+                      </div>
+                    </div>
+                  )
+                })}
+                {data.goals.length === 0 && <p className="text-slate-500">No goals yet. Create your first goal.</p>}              </div>
             </section>
 
             <section className="rounded-2xl bg-white p-6 shadow-sm">
@@ -338,15 +388,14 @@ function App() {
                 <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Category" value={goalDraft.category} onChange={(e) => setGoalDraft({ ...goalDraft, category: e.target.value })} />
                 <textarea className="w-full rounded-lg border border-slate-300 p-2" rows={3} placeholder="Description" value={goalDraft.description} onChange={(e) => setGoalDraft({ ...goalDraft, description: e.target.value })} />
                 <div className="grid grid-cols-2 gap-2">
-                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.progress} onChange={(e) => setGoalDraft({ ...goalDraft, progress: Number(e.target.value) })} />
-                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.target} onChange={(e) => setGoalDraft({ ...goalDraft, target: Number(e.target.value) })} />
+                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.currentProgress} onChange={(e) => setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) })} />
+                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.targetProgress} onChange={(e) => setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) })} />
                 </div>
                 <select className="w-full rounded-lg border border-slate-300 p-2" value={goalDraft.status} onChange={(e) => setGoalDraft({ ...goalDraft, status: e.target.value })}>
                   <option>Not started</option>
                   <option>In progress</option>
                   <option>Completed</option>
                   <option>Paused</option>
-                  <option>On hold</option>
                 </select>
                 <div className="flex gap-2">
                   <button onClick={saveGoal} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{isEditingGoal ? 'Save Changes' : 'Add Goal'}</button>
@@ -356,7 +405,7 @@ function App() {
 
               <div className="space-y-4">
                 {data.goals.map((goal) => {
-                  const percent = goal.target > 0 ? Math.min(100, Math.round((goal.progress / goal.target) * 100)) : 0
+                  const percent = goal.targetProgress > 0 ? Math.min(100, Math.round((goal.currentProgress / goal.targetProgress) * 100)) : 0
                   return (
                     <div key={goal.id} className="rounded-xl border border-slate-200 p-4">
                       <div className="flex items-start justify-between">
@@ -373,7 +422,7 @@ function App() {
                       <div className="mt-3 h-3 w-full rounded-full bg-slate-200">
                         <div className="h-3 rounded-full bg-indigo-500" style={{ width: `${percent}%` }} />
                       </div>
-                      <p className="mt-1 text-sm">{goal.progress} / {goal.target} ({percent}%)</p>
+                      <p className="mt-1 text-sm">{goal.currentProgress} / {goal.targetProgress} ({percent}%)</p>
                     </div>
                   )
                 })}
