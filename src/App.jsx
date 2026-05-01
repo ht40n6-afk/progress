@@ -199,6 +199,13 @@ function App() {
     setValue('')
   }
 
+  const removeListItem = (field, indexToRemove) => {
+    updateTodayEntry({
+      ...todayEntry,
+      [field]: todayEntry[field].filter((_, index) => index !== indexToRemove),
+    })
+  }
+
   const saveGoal = () => {
     if (!goalDraft.name.trim()) return
     if (goalDraft.target <= 0) return
@@ -260,9 +267,9 @@ function App() {
             <section className="rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">1. Today Entry ({today})</h2>
               <div className="mt-4 space-y-4">
-                <EntryInput label="Achievements" value={achievementInput} setValue={setAchievementInput} onAdd={() => addListItem('achievements', achievementInput, setAchievementInput)} items={todayEntry.achievements} xpText="+10 XP each" />
-                <EntryInput label="Gratitude" value={gratitudeInput} setValue={setGratitudeInput} onAdd={() => addListItem('gratitude', gratitudeInput, setGratitudeInput)} items={todayEntry.gratitude} xpText="+5 XP each" />
-                <EntryInput label="Goal Progress Notes" value={goalNoteInput} setValue={setGoalNoteInput} onAdd={() => addListItem('goalNotes', goalNoteInput, setGoalNoteInput)} items={todayEntry.goalNotes} xpText="+15 XP each" />
+                <EntryInput label="Achievements" value={achievementInput} setValue={setAchievementInput} onAdd={() => addListItem('achievements', achievementInput, setAchievementInput)} onRemove={(index) => removeListItem('achievements', index)} items={todayEntry.achievements} xpText="+10 XP each" />
+                <EntryInput label="Gratitude" value={gratitudeInput} setValue={setGratitudeInput} onAdd={() => addListItem('gratitude', gratitudeInput, setGratitudeInput)} onRemove={(index) => removeListItem('gratitude', index)} items={todayEntry.gratitude} xpText="+5 XP each" />
+                <EntryInput label="Goal Progress Notes" value={goalNoteInput} setValue={setGoalNoteInput} onAdd={() => addListItem('goalNotes', goalNoteInput, setGoalNoteInput)} onRemove={(index) => removeListItem('goalNotes', index)} items={todayEntry.goalNotes} xpText="+15 XP each" />
                 <div className="grid grid-cols-2 gap-4">
                   <ScoreInput label="Mood Score" value={todayEntry.mood} onChange={(value) => updateTodayEntry({ ...todayEntry, mood: value })} />
                   <ScoreInput label="Energy Score" value={todayEntry.energy} onChange={(value) => updateTodayEntry({ ...todayEntry, energy: value })} />
@@ -338,6 +345,7 @@ function App() {
                   <option>Not started</option>
                   <option>In progress</option>
                   <option>Completed</option>
+                  <option>Paused</option>
                   <option>On hold</option>
                 </select>
                 <div className="flex gap-2">
@@ -379,7 +387,7 @@ function App() {
   )
 }
 
-function EntryInput({ label, value, setValue, onAdd, items, xpText }) { return <div><label className="mb-1 block font-medium">{label} ({xpText})</label><div className="flex gap-2"><input value={value} onChange={(e) => setValue(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" placeholder={`Add ${label.toLowerCase()}`} /><button onClick={onAdd} className="rounded-lg bg-slate-800 px-3 py-2 text-white">Add</button></div><ul className="mt-2 list-disc space-y-1 pl-6 text-sm">{items.map((item, index) => <li key={index}>{item}</li>)}</ul></div> }
+function EntryInput({ label, value, setValue, onAdd, onRemove, items, xpText }) { return <div><label className="mb-1 block font-medium">{label} ({xpText})</label><div className="flex gap-2"><input value={value} onChange={(e) => setValue(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" placeholder={`Add ${label.toLowerCase()}`} /><button onClick={onAdd} className="rounded-lg bg-slate-800 px-3 py-2 text-white">Add</button></div><ul className="mt-2 space-y-1 pl-1 text-sm">{items.map((item, index) => <li key={index} className="flex items-center justify-between rounded bg-slate-100 px-2 py-1"><span>{item}</span><button onClick={() => onRemove(index)} className="rounded bg-rose-100 px-2 py-0.5 text-rose-700">X</button></li>)}</ul></div> }
 function ScoreInput({ label, value, onChange }) { return <div><label className="mb-1 block font-medium">{label} (1-10)</label><input type="range" min="1" max="10" value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full" /><p className="text-center text-sm">{value}</p></div> }
 function Stat({ label, value }) { return <div className="flex items-center justify-between rounded-lg bg-slate-100 px-3 py-2"><span>{label}</span><span className="font-semibold">{value}</span></div> }
 function DashboardCard({ title, value, children }) { return <div className="rounded-lg bg-slate-100 p-3"><p className="text-slate-600">{title}</p><p className="font-semibold">{value}</p>{children}</div> }
