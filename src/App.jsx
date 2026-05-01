@@ -17,6 +17,36 @@ const defaultState = {
   entries: {},
 }
 
+
+function createEmptyEntry(date) {
+  return {
+    date,
+    achievements: [],
+    gratitude: [],
+    goalNotes: [],
+    mood: 5,
+    energy: 5,
+    lesson: '',
+    xpEarned: 0,
+  }
+}
+
+function normalizeEntry(rawEntry, date) {
+  const entry = rawEntry && typeof rawEntry === 'object' ? rawEntry : {}
+  const normalized = {
+    date,
+    achievements: Array.isArray(entry.achievements) ? entry.achievements : [],
+    gratitude: Array.isArray(entry.gratitude) ? entry.gratitude : [],
+    goalNotes: Array.isArray(entry.goalNotes) ? entry.goalNotes : [],
+    mood: Number(entry.mood) || 5,
+    energy: Number(entry.energy) || 5,
+    lesson: typeof entry.lesson === 'string' ? entry.lesson : '',
+    xpEarned: Number(entry.xpEarned) || 0,
+  }
+  normalized.xpEarned = calculateEntryXP(normalized)
+  return normalized
+}
+
 function safeId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   return `goal-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -58,9 +88,12 @@ function loadData() {
       ? parsed.goals.map(normalizeGoal).filter(Boolean)
       : []
 
+    const rawEntries = parsed.entries && typeof parsed.entries === 'object' ? parsed.entries : {}
+    const normalizedEntries = Object.fromEntries(Object.entries(rawEntries).map(([date, entry]) => [date, normalizeEntry(entry, date)]))
+
     return {
       goals: normalizedGoals,
-      entries: parsed.entries ?? {},
+      entries: normalizedEntries,
     }
   } catch {
     return defaultState
@@ -156,15 +189,10 @@ function App() {
   const [dashboardEditingGoalId, setDashboardEditingGoalId] = useState(null)
 
   const today = todayString()
+  const [selectedDate, setSelectedDate] = useState(today)
+  const [historyDate, setHistoryDate] = useState(today)
 
-  const todayEntry = data.entries[today] || {
-    achievements: [],
-    gratitude: [],
-    goalNotes: [],
-    mood: 5,
-    energy: 5,
-    lesson: '',
-  }
+  const todayEntry = data.entries[selectedDate] || createEmptyEntry(selectedDate)
 
   const totalXP = useMemo(() => {
     return Object.values(data.entries).reduce((sum, entry) => sum + calculateEntryXP(entry), 0)
@@ -183,11 +211,12 @@ function App() {
   }
 
   const updateTodayEntry = (updatedEntry) => {
+    const normalized = normalizeEntry({ ...updatedEntry, date: selectedDate }, selectedDate)
     updateData({
       ...data,
       entries: {
         ...data.entries,
-        [today]: updatedEntry,
+        [selectedDate]: normalized,
       },
     })
   }
@@ -279,7 +308,7 @@ function App() {
         {activePage === 'dashboard' && (
           <div className="grid gap-6 lg:grid-cols-2">
             <section className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-semibold">1. Today Entry ({today})</h2>
+              <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">1. Today Entry ({selectedDate})</h2><input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="rounded-lg border border-slate-300 p-2 text-sm" /></div>
               <div className="mt-4 space-y-4">
                 <EntryInput label="Achievements" value={achievementInput} setValue={setAchievementInput} onAdd={() => addListItem('achievements', achievementInput, setAchievementInput)} onRemove={(index) => removeListItem('achievements', index)} items={todayEntry.achievements} xpText="+10 XP each" />
                 <EntryInput label="Gratitude" value={gratitudeInput} setValue={setGratitudeInput} onAdd={() => addListItem('gratitude', gratitudeInput, setGratitudeInput)} onRemove={(index) => removeListItem('gratitude', index)} items={todayEntry.gratitude} xpText="+5 XP each" />
@@ -380,14 +409,21 @@ function App() {
 
             <section className="rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">4. History</h2>
-              <div className="mt-4 space-y-3 text-sm">
-                {Object.keys(data.entries).sort((a, b) => b.localeCompare(a)).map((date) => (
-                  <div key={date} className="rounded-lg border border-slate-200 p-3">
-                    <p className="font-semibold">{date}</p>
-                    <p>XP: {calculateEntryXP(data.entries[date])}</p>
-                  </div>
-                ))}
-                {Object.keys(data.entries).length === 0 && <p className="text-slate-500">No history yet. Add your first entry today.</p>}
+              <div className="mt-3 flex gap-2">
+                <input type="date" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} className="rounded-lg border border-slate-300 p-2 text-sm" />
+              </div>
+              <div className="mt-4 rounded-lg border border-slate-200 p-3 text-sm">
+                {data.entries[historyDate] ? (
+                  <>
+                    <p className="font-semibold">{historyDate} • XP: {data.entries[historyDate].xpEarned}</p>
+                    <p>Achievements: {data.entries[historyDate].achievements.join(', ') || '-'}</p>
+                    <p>Gratitude: {data.entries[historyDate].gratitude.join(', ') || '-'}</p>
+                    <p>Goal Notes: {data.entries[historyDate].goalNotes.join(', ') || '-'}</p>
+                    <p>Mood: {data.entries[historyDate].mood}</p>
+                    <p>Energy: {data.entries[historyDate].energy}</p>
+                    <p>Lesson: {data.entries[historyDate].lesson || '-'}</p>
+                  </>
+                ) : <p className="text-slate-500">No saved entry for this date.</p>}
               </div>
             </section>
           </div>
