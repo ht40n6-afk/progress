@@ -226,6 +226,18 @@ function App() {
     setIsEditingGoal(true)
   }
 
+
+  const completeGoal = (goalId) => {
+    updateData({
+      ...data,
+      goals: data.goals.map((goal) => (
+        goal.id === goalId
+          ? { ...goal, status: 'Completed', currentProgress: goal.targetProgress }
+          : goal
+      )),
+    })
+  }
+
   const deleteGoal = (goalId) => {
     updateData({
       ...data,
@@ -327,6 +339,11 @@ function App() {
                             <button onClick={() => { saveGoal(); setDashboardEditingGoalId(null) }} className="rounded bg-indigo-600 px-2 py-1 text-white">Save</button>
                           ) : (
                             <button onClick={() => { editGoal(goal); setDashboardEditingGoalId(goal.id) }} className="rounded bg-slate-100 px-2 py-1">Edit</button>
+                          )}
+                          {goal.status !== 'Completed' ? (
+                            <button onClick={() => completeGoal(goal.id)} className="rounded bg-emerald-100 px-2 py-1 text-emerald-700">Complete</button>
+                          ) : (
+                            <button disabled className="rounded bg-emerald-50 px-2 py-1 text-emerald-400">Completed</button>
                           )}
                           <button onClick={() => deleteGoal(goal.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                         </div>
