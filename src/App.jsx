@@ -110,36 +110,6 @@ function App() {
     setValue('')
   }
 
-  const saveGoal = () => {
-    if (!goalDraft.name.trim()) return
-    if (goalDraft.target <= 0) return
-
-    const nextGoals = isEditingGoal
-      ? data.goals.map((goal) => (goal.id === goalDraft.id ? goalDraft : goal))
-      : [...data.goals, goalDraft]
-
-    updateData({ ...data, goals: nextGoals })
-    setGoalDraft(createEmptyGoal())
-    setIsEditingGoal(false)
-  }
-
-  const editGoal = (goal) => {
-    setGoalDraft(goal)
-    setIsEditingGoal(true)
-  }
-
-  const deleteGoal = (goalId) => {
-    updateData({
-      ...data,
-      goals: data.goals.filter((goal) => goal.id !== goalId),
-    })
-
-    if (goalDraft.id === goalId) {
-      setGoalDraft(createEmptyGoal())
-      setIsEditingGoal(false)
-    }
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 p-6 text-slate-800">
       <div className="mx-auto max-w-6xl space-y-6">
