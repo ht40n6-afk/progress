@@ -538,21 +538,30 @@ function App() {
 
         {selectedHistoryEntry && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedHistoryEntry(null)}>
-            <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-              <div className="mb-4 flex items-center justify-between">
+            <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
                 <div>
-                  <h3 className="text-xl font-semibold">History Details</h3>
-                  <p className="text-sm text-slate-600">{selectedHistoryEntry.date} • XP: {selectedHistoryEntry.xpEarned}</p>
+                  <h3 className="text-xl font-semibold">Daily History Details</h3>
+                  <p className="mt-1 text-sm text-slate-600">{selectedHistoryEntry.date}</p>
                 </div>
-                <button type="button" onClick={() => setSelectedHistoryEntry(null)} className="rounded bg-slate-100 px-3 py-1 text-sm">Close</button>
+                <button type="button" onClick={() => setSelectedHistoryEntry(null)} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Close</button>
               </div>
-              <div className="space-y-3 text-sm">
+
+              <div className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-4">
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">XP Earned</p>
+                  <p className="text-xl font-bold text-indigo-700">{selectedHistoryEntry.xpEarned ?? 0}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <ScoreCard title="Mood" value={selectedHistoryEntry.mood} />
+                  <ScoreCard title="Energy" value={selectedHistoryEntry.energy} />
+                </div>
+
                 <ModalSection title="Achievements" value={selectedHistoryEntry.achievements} />
                 <ModalSection title="Gratitude" value={selectedHistoryEntry.gratitude} />
                 <ModalSection title="Goal Notes" value={selectedHistoryEntry.goalNotes} />
-                <ModalSection title="Mood" value={selectedHistoryEntry.mood} />
-                <ModalSection title="Energy" value={selectedHistoryEntry.energy} />
-                <ModalSection title="Lesson" value={selectedHistoryEntry.lesson || '-'} />
+                <ModalSection title="Lesson" value={selectedHistoryEntry.lesson} />
               </div>
             </div>
           </div>
@@ -571,8 +580,13 @@ function ProgressBar({ percent }) { return <div className="mt-2 h-2 w-full round
 function sumCount(entries, field) { return Object.values(entries).reduce((sum, entry) => sum + entry[field].length, 0) }
 function averageScore(entries, field) { const values = Object.values(entries).map((entry) => entry[field]).filter(Boolean); if (!values.length) return '-'; return (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1) }
 
+function ScoreCard({ title, value }) {
+  const displayValue = value === 0 || value ? value : 'Not provided'
+  return <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p><p className="mt-1 text-lg font-semibold">{displayValue}</p></div>
+}
+
 function ModalSection({ title, value }) {
-  const displayValue = Array.isArray(value) ? (value.length ? value.join(', ') : '-') : (value ?? '-')
+  const displayValue = Array.isArray(value) ? (value.length ? value.join(', ') : 'Not provided') : (value ? value : 'Not provided')
   return <div className="rounded-lg bg-slate-50 p-3"><p className="font-semibold">{title}</p><p className="text-slate-700">{displayValue}</p></div>
 }
 
