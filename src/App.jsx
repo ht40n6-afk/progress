@@ -195,6 +195,8 @@ function App() {
   const [selectedDate, setSelectedDate] = useState(today)
   const [historyDate, setHistoryDate] = useState(today)
   const [selectedHistoryEntry, setSelectedHistoryEntry] = useState(null)
+  const [isHistoryEditMode, setIsHistoryEditMode] = useState(false)
+  const [historyDraft, setHistoryDraft] = useState(null)
 
   const todayEntry = data.entries[selectedDate] || createEmptyEntry(selectedDate)
 
@@ -296,6 +298,70 @@ function App() {
       setGoalDraft(createEmptyGoal())
       setIsEditingGoal(false)
     }
+  }
+
+
+  const openHistoryModal = (date) => {
+    const entry = data.entries[date]
+    if (!entry) return
+    const selected = { date, ...entry }
+    setSelectedHistoryEntry(selected)
+    setHistoryDraft({
+      ...selected,
+      achievementsText: Array.isArray(selected.achievements) ? selected.achievements.join('\n') : '',
+      gratitudeText: Array.isArray(selected.gratitude) ? selected.gratitude.join('\n') : '',
+      goalNotesText: Array.isArray(selected.goalNotes) ? selected.goalNotes.join('\n') : '',
+    })
+    setIsHistoryEditMode(false)
+  }
+
+  const closeHistoryModal = () => {
+    setSelectedHistoryEntry(null)
+    setHistoryDraft(null)
+    setIsHistoryEditMode(false)
+  }
+
+  const toList = (text) => {
+    const input = (text || '').trim()
+    if (!input) return []
+    const source = input.includes('\n') ? input.split('\n') : input.split(',')
+    return source.map((item) => item.trim()).filter(Boolean)
+  }
+
+  const saveHistoryEdit = () => {
+    if (!historyDraft) return
+    const updatedEntry = normalizeEntry({
+      ...historyDraft,
+      achievements: toList(historyDraft.achievementsText),
+      gratitude: toList(historyDraft.gratitudeText),
+      goalNotes: toList(historyDraft.goalNotesText),
+      mood: Number(historyDraft.mood) || 5,
+      energy: Number(historyDraft.energy) || 5,
+      lesson: historyDraft.lesson || '',
+    }, historyDraft.date)
+
+    const nextData = {
+      ...data,
+      entries: {
+        ...data.entries,
+        [historyDraft.date]: updatedEntry,
+      },
+    }
+    updateData(nextData)
+    setSelectedHistoryEntry({ date: historyDraft.date, ...updatedEntry })
+    setHistoryDraft({
+      ...historyDraft,
+      ...updatedEntry,
+      achievementsText: updatedEntry.achievements.join('\n'),
+      gratitudeText: updatedEntry.gratitude.join('\n'),
+      goalNotesText: updatedEntry.goalNotes.join('\n'),
+    })
+    setIsHistoryEditMode(false)
+  }
+
+  const achievementBullets = (entry) => {
+    const text = Array.isArray(entry?.achievements) ? entry.achievements.join('\n') : (entry?.achievements || '')
+    return toList(text)
   }
 
   useEffect(() => {
@@ -462,8 +528,8 @@ function App() {
                 {data.entries[historyDate] ? (
                   <button
                     type="button"
-                    onClick={() => setSelectedHistoryEntry({ date: historyDate, ...data.entries[historyDate] })}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedHistoryEntry({ date: historyDate, ...data.entries[historyDate] }) } }}
+                    onClick={() => openHistoryModal(historyDate)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHistoryModal(historyDate) } }}
                     className="w-full rounded-lg border border-transparent p-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
                   >
                     <p className="font-semibold">{historyDate} • XP: {data.entries[historyDate].xpEarned}</p>
@@ -541,31 +607,59 @@ function App() {
         )}
 
         {selectedHistoryEntry && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedHistoryEntry(null)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={closeHistoryModal}>
             <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
                 <div>
                   <h3 className="text-xl font-semibold">Daily History Details</h3>
                   <p className="mt-1 text-sm text-slate-600">{selectedHistoryEntry.date}</p>
                 </div>
-                <button type="button" onClick={() => setSelectedHistoryEntry(null)} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Close</button>
+                <button type="button" onClick={closeHistoryModal} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Close</button>
               </div>
 
               <div className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-4">
-                <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">XP Earned</p>
-                  <p className="text-xl font-bold text-indigo-700">{selectedHistoryEntry.xpEarned ?? 0}</p>
+                <div className="flex items-center justify-between">
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">XP Earned</p>
+                    <p className="text-xl font-bold text-indigo-700">{selectedHistoryEntry.xpEarned ?? 0}</p>
+                  </div>
+                  {!isHistoryEditMode ? (
+                    <button type="button" onClick={() => setIsHistoryEditMode(true)} className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white">Edit</button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button type="button" onClick={saveHistoryEdit} className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white">Save</button>
+                      <button type="button" onClick={() => { setIsHistoryEditMode(false); setHistoryDraft({ ...selectedHistoryEntry, achievementsText: selectedHistoryEntry.achievements.join('\n'), gratitudeText: selectedHistoryEntry.gratitude.join('\n'), goalNotesText: selectedHistoryEntry.goalNotes.join('\n') }) }} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Cancel</button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <ScoreCard title="Mood" value={selectedHistoryEntry.mood} />
-                  <ScoreCard title="Energy" value={selectedHistoryEntry.energy} />
-                </div>
-
-                <ModalSection title="Achievements" value={selectedHistoryEntry.achievements} />
-                <ModalSection title="Gratitude" value={selectedHistoryEntry.gratitude} />
-                <ModalSection title="Goal Notes" value={selectedHistoryEntry.goalNotes} />
-                <ModalSection title="Lesson" value={selectedHistoryEntry.lesson} />
+                {isHistoryEditMode ? (
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <label className="mb-1 block font-semibold">Achievements</label>
+                      <textarea rows={4} value={historyDraft?.achievementsText || ''} onChange={(e) => setHistoryDraft({ ...historyDraft, achievementsText: e.target.value })} className="w-full rounded-lg border border-slate-300 p-2" />
+                      <p className="mt-1 text-xs text-slate-500">Write each achievement on a new line.</p>
+                    </div>
+                    <FormTextArea label="Gratitude" value={historyDraft?.gratitudeText || ''} onChange={(value) => setHistoryDraft({ ...historyDraft, gratitudeText: value })} />
+                    <FormTextArea label="Goal Notes" value={historyDraft?.goalNotesText || ''} onChange={(value) => setHistoryDraft({ ...historyDraft, goalNotesText: value })} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormInput label="Mood" type="number" value={historyDraft?.mood ?? ''} onChange={(value) => setHistoryDraft({ ...historyDraft, mood: value })} />
+                      <FormInput label="Energy" type="number" value={historyDraft?.energy ?? ''} onChange={(value) => setHistoryDraft({ ...historyDraft, energy: value })} />
+                    </div>
+                    <FormTextArea label="Lesson" value={historyDraft?.lesson || ''} onChange={(value) => setHistoryDraft({ ...historyDraft, lesson: value })} />
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <ScoreCard title="Mood" value={selectedHistoryEntry.mood} />
+                      <ScoreCard title="Energy" value={selectedHistoryEntry.energy} />
+                    </div>
+                    <BulletSection title="Achievements" items={achievementBullets(selectedHistoryEntry)} />
+                    <ModalSection title="Gratitude" value={selectedHistoryEntry.gratitude} />
+                    <ModalSection title="Goal Notes" value={selectedHistoryEntry.goalNotes} />
+                    <ModalSection title="Lesson" value={selectedHistoryEntry.lesson} />
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -592,6 +686,19 @@ function ScoreCard({ title, value }) {
 function ModalSection({ title, value }) {
   const displayValue = Array.isArray(value) ? (value.length ? value.join(', ') : 'Not provided') : (value ? value : 'Not provided')
   return <div className="rounded-lg bg-slate-50 p-3"><p className="font-semibold">{title}</p><p className="text-slate-700">{displayValue}</p></div>
+}
+
+
+function FormTextArea({ label, value, onChange }) {
+  return <div><label className="mb-1 block font-semibold">{label}</label><textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" /></div>
+}
+
+function FormInput({ label, value, onChange, type = 'text' }) {
+  return <div><label className="mb-1 block font-semibold">{label}</label><input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" /></div>
+}
+
+function BulletSection({ title, items }) {
+  return <div className="rounded-lg bg-slate-50 p-3"><p className="font-semibold">{title}</p>{items.length ? <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-700">{items.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p className="text-slate-700">Not provided</p>}</div>
 }
 
 export default App
