@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 const STORAGE_KEY = 'life-gamification-tracker-v1'
 
@@ -194,6 +194,7 @@ function App() {
   const today = todayString()
   const [selectedDate, setSelectedDate] = useState(today)
   const [historyDate, setHistoryDate] = useState(today)
+  const [selectedHistoryEntry, setSelectedHistoryEntry] = useState(null)
 
   const todayEntry = data.entries[selectedDate] || createEmptyEntry(selectedDate)
 
@@ -297,8 +298,17 @@ function App() {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-slate-50 p-6 text-slate-800">
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.key === "Escape") setSelectedHistoryEntry(null)
+    }
+
+    if (!selectedHistoryEntry) return undefined
+    window.addEventListener("keydown", handleEsc)
+    return () => window.removeEventListener("keydown", handleEsc)
+  }, [selectedHistoryEntry])
+
+  return (    <div className="min-h-screen bg-slate-50 p-6 text-slate-800">
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="rounded-2xl bg-white p-6 shadow-sm">
           <h1 className="text-3xl font-bold">Personal Life Gamification Tracker</h1>
@@ -450,7 +460,12 @@ function App() {
               </div>
               <div className="mt-4 rounded-lg border border-slate-200 p-3 text-sm">
                 {data.entries[historyDate] ? (
-                  <>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedHistoryEntry({ date: historyDate, ...data.entries[historyDate] })}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedHistoryEntry({ date: historyDate, ...data.entries[historyDate] }) } }}
+                    className="w-full rounded-lg border border-transparent p-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+                  >
                     <p className="font-semibold">{historyDate} • XP: {data.entries[historyDate].xpEarned}</p>
                     <p>Achievements: {data.entries[historyDate].achievements.join(', ') || '-'}</p>
                     <p>Gratitude: {data.entries[historyDate].gratitude.join(', ') || '-'}</p>
@@ -458,7 +473,7 @@ function App() {
                     <p>Mood: {data.entries[historyDate].mood}</p>
                     <p>Energy: {data.entries[historyDate].energy}</p>
                     <p>Lesson: {data.entries[historyDate].lesson || '-'}</p>
-                  </>
+                  </button>
                 ) : <p className="text-slate-500">No saved entry for this date.</p>}
               </div>
             </section>
@@ -520,6 +535,29 @@ function App() {
             </div>
           </section>
         )}
+
+        {selectedHistoryEntry && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSelectedHistoryEntry(null)}>
+            <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold">History Details</h3>
+                  <p className="text-sm text-slate-600">{selectedHistoryEntry.date} • XP: {selectedHistoryEntry.xpEarned}</p>
+                </div>
+                <button type="button" onClick={() => setSelectedHistoryEntry(null)} className="rounded bg-slate-100 px-3 py-1 text-sm">Close</button>
+              </div>
+              <div className="space-y-3 text-sm">
+                <ModalSection title="Achievements" value={selectedHistoryEntry.achievements} />
+                <ModalSection title="Gratitude" value={selectedHistoryEntry.gratitude} />
+                <ModalSection title="Goal Notes" value={selectedHistoryEntry.goalNotes} />
+                <ModalSection title="Mood" value={selectedHistoryEntry.mood} />
+                <ModalSection title="Energy" value={selectedHistoryEntry.energy} />
+                <ModalSection title="Lesson" value={selectedHistoryEntry.lesson || '-'} />
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   )
@@ -532,5 +570,10 @@ function DashboardCard({ title, value, children }) { return <div className="roun
 function ProgressBar({ percent }) { return <div className="mt-2 h-2 w-full rounded-full bg-slate-200"><div className="h-2 rounded-full bg-indigo-500" style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div> }
 function sumCount(entries, field) { return Object.values(entries).reduce((sum, entry) => sum + entry[field].length, 0) }
 function averageScore(entries, field) { const values = Object.values(entries).map((entry) => entry[field]).filter(Boolean); if (!values.length) return '-'; return (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1) }
+
+function ModalSection({ title, value }) {
+  const displayValue = Array.isArray(value) ? (value.length ? value.join(', ') : '-') : (value ?? '-')
+  return <div className="rounded-lg bg-slate-50 p-3"><p className="font-semibold">{title}</p><p className="text-slate-700">{displayValue}</p></div>
+}
 
 export default App
