@@ -467,12 +467,16 @@ function App() {
                     className="w-full rounded-lg border border-transparent p-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
                   >
                     <p className="font-semibold">{historyDate} • XP: {data.entries[historyDate].xpEarned}</p>
-                    <p>Achievements: {data.entries[historyDate].achievements.join(', ') || '-'}</p>
-                    <p>Gratitude: {data.entries[historyDate].gratitude.join(', ') || '-'}</p>
-                    <p>Goal Notes: {data.entries[historyDate].goalNotes.join(', ') || '-'}</p>
-                    <p>Mood: {data.entries[historyDate].mood}</p>
-                    <p>Energy: {data.entries[historyDate].energy}</p>
-                    <p>Lesson: {data.entries[historyDate].lesson || '-'}</p>
+                    <div className="mt-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements preview</p>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-slate-700">
+                        {(data.entries[historyDate].achievements.length ? data.entries[historyDate].achievements.slice(0, 2) : ['Not provided']).map((item, index) => (
+                          <li key={index}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <p className="mt-2"><span className="font-medium">Lesson preview:</span> {data.entries[historyDate].lesson || 'Not provided'}</p>
+                    <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-indigo-600">View details →</p>
                   </button>
                 ) : <p className="text-slate-500">No saved entry for this date.</p>}
               </div>
