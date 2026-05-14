@@ -68,6 +68,10 @@ function safeScore(value) {
   return Number.isFinite(num) ? num : 'Not provided'
 }
 
+function taskXpValue(task) {
+  return Number(task?.xp) >= 0 ? Number(task.xp) : 10
+}
+
 function safeId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   return `goal-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -244,8 +248,6 @@ function App() {
 
 
   const planForSelectedDate = data.dailyPlans?.[selectedDate] || []
-
-  const taskXpValue = (task) => (Number(task?.xp) >= 0 ? Number(task.xp) : 10)
 
   const addPlanTask = () => {
     if (!planTaskInput.trim()) return
