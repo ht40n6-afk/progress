@@ -50,6 +50,24 @@ function normalizeEntry(rawEntry, date) {
   return normalized
 }
 
+
+function ensureArray(value) {
+  if (Array.isArray(value)) return value.filter((item) => item !== null && item !== undefined).map((item) => String(item))
+  if (typeof value === 'string') return value.trim() ? value.split(/\n|,/).map((item) => item.trim()).filter(Boolean) : []
+  return []
+}
+
+function safeText(value, fallback = 'Not provided') {
+  if (typeof value === 'string') return value.trim() || fallback
+  if (value === null || value === undefined) return fallback
+  return String(value)
+}
+
+function safeScore(value) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : 'Not provided'
+}
+
 function safeId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   return `goal-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -391,9 +409,9 @@ function App() {
     setSelectedHistoryEntry(selected)
     setHistoryDraft({
       ...selected,
-      achievementsText: Array.isArray(selected.achievements) ? selected.achievements.join('\n') : '',
-      gratitudeText: Array.isArray(selected.gratitude) ? selected.gratitude.join('\n') : '',
-      goalNotesText: Array.isArray(selected.goalNotes) ? selected.goalNotes.join('\n') : '',
+      achievementsText: ensureArray(selected.achievements).join('\n'),
+      gratitudeText: ensureArray(selected.gratitude).join('\n'),
+      goalNotesText: ensureArray(selected.goalNotes).join('\n'),
     })
     setIsHistoryEditMode(false)
   }
@@ -405,7 +423,7 @@ function App() {
   }
 
   const toList = (text) => {
-    const input = (text || '').trim()
+    const input = typeof text === 'string' ? text.trim() : ''
     if (!input) return []
     const source = input.includes('\n') ? input.split('\n') : input.split(',')
     return source.map((item) => item.trim()).filter(Boolean)
@@ -442,12 +460,12 @@ function App() {
     setIsHistoryEditMode(false)
   }
 
-  const achievementBullets = (entry) => {
-    const text = Array.isArray(entry?.achievements) ? entry.achievements.join('\n') : (entry?.achievements || '')
-    return toList(text)
-  }
+  const achievementBullets = (entry) => ensureArray(entry?.achievements)
 
-  const plannedTasksForDate = (date) => data.dailyPlans?.[date] || []
+  const plannedTasksForDate = (date) => {
+    const tasks = data?.dailyPlans?.[date]
+    return Array.isArray(tasks) ? tasks : []
+  }
 
   useEffect(() => {
     const handleEsc = (event) => {
@@ -662,12 +680,12 @@ function App() {
                     <div className="mt-2">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements preview</p>
                       <ul className="mt-1 list-disc space-y-0.5 pl-5 text-slate-700">
-                        {(data.entries[historyDate].achievements.length ? data.entries[historyDate].achievements.slice(0, 2) : ['Not provided']).map((item, index) => (
+                        {(ensureArray(data.entries[historyDate].achievements).length ? ensureArray(data.entries[historyDate].achievements).slice(0, 2) : ['Not provided']).map((item, index) => (
                           <li key={index}>{item}</li>
                         ))}
                       </ul>
                     </div>
-                    <p className="mt-2"><span className="font-medium">Lesson preview:</span> {data.entries[historyDate].lesson || 'Not provided'}</p>
+                    <p className="mt-2"><span className="font-medium">Lesson preview:</span> {safeText(data.entries[historyDate].lesson)}</p>
                     <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-indigo-600">View details →</p>
                   </button>
                 ) : <p className="text-slate-500">No saved entry for this date.</p>}
@@ -754,7 +772,7 @@ function App() {
                   ) : (
                     <div className="flex gap-2">
                       <button type="button" onClick={saveHistoryEdit} className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white">Save</button>
-                      <button type="button" onClick={() => { setIsHistoryEditMode(false); setHistoryDraft({ ...selectedHistoryEntry, achievementsText: selectedHistoryEntry.achievements.join('\n'), gratitudeText: selectedHistoryEntry.gratitude.join('\n'), goalNotesText: selectedHistoryEntry.goalNotes.join('\n') }) }} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Cancel</button>
+                      <button type="button" onClick={() => { setIsHistoryEditMode(false); setHistoryDraft({ ...selectedHistoryEntry, achievementsText: ensureArray(selectedHistoryEntry.achievements).join('\n'), gratitudeText: ensureArray(selectedHistoryEntry.gratitude).join('\n'), goalNotesText: ensureArray(selectedHistoryEntry.goalNotes).join('\n') }) }} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Cancel</button>
                     </div>
                   )}
                 </div>
@@ -777,13 +795,13 @@ function App() {
                 ) : (
                   <>
                     <div className="grid grid-cols-2 gap-3">
-                      <ScoreCard title="Mood" value={selectedHistoryEntry.mood} />
-                      <ScoreCard title="Energy" value={selectedHistoryEntry.energy} />
+                      <ScoreCard title="Mood" value={safeScore(selectedHistoryEntry.mood)} />
+                      <ScoreCard title="Energy" value={safeScore(selectedHistoryEntry.energy)} />
                     </div>
                     <BulletSection title="Achievements" items={achievementBullets(selectedHistoryEntry)} />
-                    <ModalSection title="Gratitude" value={selectedHistoryEntry.gratitude} />
-                    <ModalSection title="Goal Notes" value={selectedHistoryEntry.goalNotes} />
-                    <ModalSection title="Lesson" value={selectedHistoryEntry.lesson} />
+                    <ModalSection title="Gratitude" value={ensureArray(selectedHistoryEntry.gratitude)} />
+                    <ModalSection title="Goal Notes" value={ensureArray(selectedHistoryEntry.goalNotes)} />
+                    <ModalSection title="Lesson" value={safeText(selectedHistoryEntry.lesson)} />
                     <TaskPreviewSection title="Planned Tasks" tasks={plannedTasksForDate(selectedHistoryEntry.date)} />
                   </>
                 )}
@@ -811,7 +829,7 @@ function ScoreCard({ title, value }) {
 }
 
 function ModalSection({ title, value }) {
-  const displayValue = Array.isArray(value) ? (value.length ? value.join(', ') : 'Not provided') : (value ? value : 'Not provided')
+  const displayValue = Array.isArray(value) ? (value.length ? value.join(', ') : 'Not provided') : safeText(value)
   return <div className="rounded-lg bg-slate-50 p-3"><p className="font-semibold">{title}</p><p className="text-slate-700">{displayValue}</p></div>
 }
 
@@ -830,15 +848,16 @@ function BulletSection({ title, items }) {
 
 
 function TaskPreviewSection({ title, tasks }) {
+  const safeTasks = Array.isArray(tasks) ? tasks : []
   return (
     <div className="rounded-lg bg-slate-50 p-3">
       <p className="font-semibold">{title}</p>
-      {tasks.length ? (
+      {safeTasks.length ? (
         <ul className="mt-2 space-y-1">
-          {tasks.map((task) => (
+          {safeTasks.map((task) => (
             <li key={task.id} className={`flex items-center gap-2 ${task.completed ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
               <input type="checkbox" checked={task.completed} readOnly className="h-4 w-4" />
-              <span>{task.text} <span className="text-xs text-slate-500">({task.category || 'General'} • {taskXpValue(task)} XP)</span></span>
+              <span>{safeText(task?.text)} <span className="text-xs text-slate-500">({task.category || 'General'} • {taskXpValue(task)} XP)</span></span>
             </li>
           ))}
         </ul>
