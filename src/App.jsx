@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 
 const STORAGE_KEY = 'life-gamification-tracker-v1'
 
+const PLAN_CATEGORIES = ['Work', 'Health', 'Personal', 'Learning', 'Admin', 'Other']
+
 const XP_RULES = {
   achievement: 10,
   gratitude: 5,
@@ -103,6 +105,8 @@ function loadData() {
               id: task?.id || safeId(),
               text: typeof task?.text === 'string' ? task.text : '',
               completed: Boolean(task?.completed),
+              category: PLAN_CATEGORIES.includes(task?.category) ? task.category : 'Other',
+              xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
               createdAt: task?.createdAt || new Date().toISOString(),
             })).filter((task) => task.text.trim())
           : [],
@@ -206,7 +210,7 @@ function App() {
   const [gratitudeInput, setGratitudeInput] = useState('')
   const [goalNoteInput, setGoalNoteInput] = useState('')
   const [planTaskInput, setPlanTaskInput] = useState('')
-  const [planCategoryInput, setPlanCategoryInput] = useState('General')
+  const [planCategoryInput, setPlanCategoryInput] = useState('Other')
   const [planXpInput, setPlanXpInput] = useState(10)
 
   const [dashboardEditingGoalId, setDashboardEditingGoalId] = useState(null)
@@ -223,13 +227,15 @@ function App() {
 
   const planForSelectedDate = data.dailyPlans?.[selectedDate] || []
 
+  const taskXpValue = (task) => (Number(task?.xp) >= 0 ? Number(task.xp) : 10)
+
   const addPlanTask = () => {
     if (!planTaskInput.trim()) return
     const nextTask = {
       id: safeId(),
       text: planTaskInput.trim(),
       completed: false,
-      category: planCategoryInput || 'General',
+      category: PLAN_CATEGORIES.includes(planCategoryInput) ? planCategoryInput : 'Other',
       xp: Number(planXpInput) >= 0 ? Number(planXpInput) : 10,
       createdAt: new Date().toISOString(),
     }
@@ -250,7 +256,7 @@ function App() {
       dailyPlans: {
         ...data.dailyPlans,
         [selectedDate]: planForSelectedDate.map((task) =>
-          task.id === taskId ? { ...task, ...updates } : task,
+          task.id === taskId ? { ...task, ...updates, category: PLAN_CATEGORIES.includes(updates.category ?? task.category) ? (updates.category ?? task.category) : 'Other' } : task,
         ),
       },
     })
@@ -272,12 +278,14 @@ function App() {
     })
   }
 
-  const dailyPlanTotalXP = planForSelectedDate.reduce((sum, task) => sum + (Number(task.xp) >= 0 ? Number(task.xp) : 10), 0)
-  const dailyPlanCompletedXP = planForSelectedDate.filter((task) => task.completed).reduce((sum, task) => sum + (Number(task.xp) >= 0 ? Number(task.xp) : 10), 0)
+  const dailyPlanTotalXP = planForSelectedDate.reduce((sum, task) => sum + taskXpValue(task), 0)
+  const dailyPlanCompletedXP = planForSelectedDate.filter((task) => task.completed).reduce((sum, task) => sum + taskXpValue(task), 0)
 
   const totalXP = useMemo(() => {
-    return Object.values(data.entries).reduce((sum, entry) => sum + calculateEntryXP(entry), 0)
-  }, [data.entries])
+    const entryXP = Object.values(data.entries).reduce((sum, entry) => sum + calculateEntryXP(entry), 0)
+    const planXP = Object.values(data.dailyPlans || {}).flat().filter((task) => task.completed).reduce((sum, task) => sum + taskXpValue(task), 0)
+    return entryXP + planXP
+  }, [data.entries, data.dailyPlans])
 
   const level = Math.floor(totalXP / 100) + 1
   const xpInCurrentLevel = totalXP % 100
@@ -507,12 +515,12 @@ function App() {
                   placeholder="Add a task or activity"
                 />
                 <div className="grid grid-cols-3 gap-2">
-                  <input value={planCategoryInput} onChange={(e) => setPlanCategoryInput(e.target.value)} className="rounded-lg border border-slate-300 p-2" placeholder="Category" />
+                  <select value={planCategoryInput} onChange={(e) => setPlanCategoryInput(e.target.value)} className="rounded-lg border border-slate-300 p-2">{PLAN_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select>
                   <input type="number" min="0" value={planXpInput} onChange={(e) => setPlanXpInput(e.target.value)} className="rounded-lg border border-slate-300 p-2" placeholder="XP" />
                   <button onClick={addPlanTask} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">Add task</button>
                 </div>
               </div>
-              <p className="mt-3 text-sm font-semibold text-slate-600">Completed plan XP: {dailyPlanCompletedXP} / {dailyPlanTotalXP} XP</p>
+              <p className="mt-3 text-sm font-semibold text-slate-600">Completed plan XP: {dailyPlanCompletedXP} / {dailyPlanTotalXP} XP (included in Total XP)</p>
 
               <div className="mt-4 space-y-2">
                 {planForSelectedDate.map((task) => (
@@ -525,11 +533,11 @@ function App() {
                         className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
                       />
                       <div className="grid grid-cols-2 gap-2">
-                        <input value={task.category || 'General'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm" />
+                        <select value={PLAN_CATEGORIES.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{PLAN_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select>
                         <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="rounded border border-slate-300 p-1 text-sm" />
                       </div>
                     </div>
-                    <span className="text-xs font-semibold text-indigo-600">{Number(task.xp) >= 0 ? task.xp : 10} XP</span>
+                    <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
                     <button onClick={() => deletePlanTask(task.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                   </div>
                 ))}
@@ -830,7 +838,7 @@ function TaskPreviewSection({ title, tasks }) {
           {tasks.map((task) => (
             <li key={task.id} className={`flex items-center gap-2 ${task.completed ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
               <input type="checkbox" checked={task.completed} readOnly className="h-4 w-4" />
-              <span>{task.text} <span className="text-xs text-slate-500">({task.category || 'General'} • {Number(task.xp) >= 0 ? task.xp : 10} XP)</span></span>
+              <span>{task.text} <span className="text-xs text-slate-500">({task.category || 'General'} • {taskXpValue(task)} XP)</span></span>
             </li>
           ))}
         </ul>
