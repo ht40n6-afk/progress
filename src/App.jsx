@@ -15,6 +15,7 @@ const todayString = () => new Date().toISOString().split('T')[0]
 const defaultState = {
   goals: [],
   entries: {},
+  dailyPlans: {},
 }
 
 
@@ -93,9 +94,25 @@ function loadData() {
     const rawEntries = parsed.entries && typeof parsed.entries === 'object' ? parsed.entries : {}
     const normalizedEntries = Object.fromEntries(Object.entries(rawEntries).map(([date, entry]) => [date, normalizeEntry(entry, date)]))
 
+    const rawPlans = parsed.dailyPlans && typeof parsed.dailyPlans === 'object' ? parsed.dailyPlans : {}
+    const normalizedPlans = Object.fromEntries(
+      Object.entries(rawPlans).map(([date, tasks]) => [
+        date,
+        Array.isArray(tasks)
+          ? tasks.map((task) => ({
+              id: task?.id || safeId(),
+              text: typeof task?.text === 'string' ? task.text : '',
+              completed: Boolean(task?.completed),
+              createdAt: task?.createdAt || new Date().toISOString(),
+            })).filter((task) => task.text.trim())
+          : [],
+      ]),
+    )
+
     return {
       goals: normalizedGoals,
       entries: normalizedEntries,
+      dailyPlans: normalizedPlans,
     }
   } catch {
     return defaultState
@@ -188,6 +205,7 @@ function App() {
   const [achievementInput, setAchievementInput] = useState('')
   const [gratitudeInput, setGratitudeInput] = useState('')
   const [goalNoteInput, setGoalNoteInput] = useState('')
+  const [planTaskInput, setPlanTaskInput] = useState('')
 
   const [dashboardEditingGoalId, setDashboardEditingGoalId] = useState(null)
 
@@ -199,6 +217,55 @@ function App() {
   const [historyDraft, setHistoryDraft] = useState(null)
 
   const todayEntry = data.entries[selectedDate] || createEmptyEntry(selectedDate)
+
+
+  const planForSelectedDate = data.dailyPlans?.[selectedDate] || []
+
+  const addPlanTask = () => {
+    if (!planTaskInput.trim()) return
+    const nextTask = {
+      id: safeId(),
+      text: planTaskInput.trim(),
+      completed: false,
+      createdAt: new Date().toISOString(),
+    }
+    updateData({
+      ...data,
+      dailyPlans: {
+        ...data.dailyPlans,
+        [selectedDate]: [...planForSelectedDate, nextTask],
+      },
+    })
+    setPlanTaskInput('')
+  }
+
+  const updatePlanTask = (taskId, updates) => {
+    updateData({
+      ...data,
+      dailyPlans: {
+        ...data.dailyPlans,
+        [selectedDate]: planForSelectedDate.map((task) =>
+          task.id === taskId ? { ...task, ...updates } : task,
+        ),
+      },
+    })
+  }
+
+  const togglePlanTask = (taskId) => {
+    const target = planForSelectedDate.find((task) => task.id === taskId)
+    if (!target) return
+    updatePlanTask(taskId, { completed: !target.completed })
+  }
+
+  const deletePlanTask = (taskId) => {
+    updateData({
+      ...data,
+      dailyPlans: {
+        ...data.dailyPlans,
+        [selectedDate]: planForSelectedDate.filter((task) => task.id !== taskId),
+      },
+    })
+  }
 
   const totalXP = useMemo(() => {
     return Object.values(data.entries).reduce((sum, entry) => sum + calculateEntryXP(entry), 0)
@@ -416,6 +483,35 @@ function App() {
                   <label className="mb-1 block font-medium">Lesson of the Day (+20 XP)</label>
                   <textarea value={todayEntry.lesson} onChange={(e) => updateTodayEntry({ ...todayEntry, lesson: e.target.value })} className="w-full rounded-lg border border-slate-300 p-2" rows={3} placeholder="What did you learn today?" />
                 </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Daily Plan</h2>
+              <p className="mt-1 text-sm text-slate-600">Plan tasks and intentions for {selectedDate}.</p>
+              <div className="mt-3 flex gap-2">
+                <input
+                  value={planTaskInput}
+                  onChange={(e) => setPlanTaskInput(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 p-2"
+                  placeholder="Add a task or activity"
+                />
+                <button onClick={addPlanTask} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">Add task</button>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {planForSelectedDate.map((task) => (
+                  <div key={task.id} className={`flex items-center gap-2 rounded-lg border border-slate-200 p-2 ${task.completed ? 'opacity-60' : ''}`}>
+                    <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
+                    <input
+                      value={task.text}
+                      onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
+                      className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
+                    />
+                    <button onClick={() => deletePlanTask(task.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                  </div>
+                ))}
+                {planForSelectedDate.length === 0 && <p className="text-sm text-slate-500">No tasks planned yet.</p>}
               </div>
             </section>
 
