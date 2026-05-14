@@ -431,6 +431,8 @@ function App() {
     return toList(text)
   }
 
+  const plannedTasksForDate = (date) => data.dailyPlans?.[date] || []
+
   useEffect(() => {
     const handleEsc = (event) => {
       if (event.key === "Escape") setSelectedHistoryEntry(null)
@@ -754,6 +756,7 @@ function App() {
                     <ModalSection title="Gratitude" value={selectedHistoryEntry.gratitude} />
                     <ModalSection title="Goal Notes" value={selectedHistoryEntry.goalNotes} />
                     <ModalSection title="Lesson" value={selectedHistoryEntry.lesson} />
+                    <TaskPreviewSection title="Planned Tasks" tasks={plannedTasksForDate(selectedHistoryEntry.date)} />
                   </>
                 )}
               </div>
@@ -795,6 +798,27 @@ function FormInput({ label, value, onChange, type = 'text' }) {
 
 function BulletSection({ title, items }) {
   return <div className="rounded-lg bg-slate-50 p-3"><p className="font-semibold">{title}</p>{items.length ? <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-700">{items.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p className="text-slate-700">Not provided</p>}</div>
+}
+
+
+function TaskPreviewSection({ title, tasks }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-3">
+      <p className="font-semibold">{title}</p>
+      {tasks.length ? (
+        <ul className="mt-2 space-y-1">
+          {tasks.map((task) => (
+            <li key={task.id} className={`flex items-center gap-2 ${task.completed ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
+              <input type="checkbox" checked={task.completed} readOnly className="h-4 w-4" />
+              <span>{task.text}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-slate-700">No tasks planned.</p>
+      )}
+    </div>
+  )
 }
 
 export default App
