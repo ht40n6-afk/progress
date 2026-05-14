@@ -103,8 +103,6 @@ function loadData() {
               id: task?.id || safeId(),
               text: typeof task?.text === 'string' ? task.text : '',
               completed: Boolean(task?.completed),
-              category: typeof task?.category === 'string' && task.category ? task.category : 'General',
-              xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
               createdAt: task?.createdAt || new Date().toISOString(),
             })).filter((task) => task.text.trim())
           : [],
