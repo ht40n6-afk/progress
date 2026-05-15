@@ -18,6 +18,7 @@ const defaultState = {
   goals: [],
   entries: {},
   dailyPlans: {},
+  rewards: [],
 }
 
 
@@ -105,6 +106,20 @@ function normalizeGoal(rawGoal) {
   }
 }
 
+
+function normalizeReward(rawReward) {
+  if (!rawReward || typeof rawReward !== 'object') return null
+  return {
+    id: rawReward.id || safeId(),
+    title: typeof rawReward.title === 'string' ? rawReward.title : 'Untitled reward',
+    description: typeof rawReward.description === 'string' ? rawReward.description : '',
+    requiredLevel: Number(rawReward.requiredLevel) >= 1 ? Number(rawReward.requiredLevel) : 1,
+    claimed: Boolean(rawReward.claimed),
+    createdAt: rawReward.createdAt || new Date().toISOString(),
+    claimedAt: rawReward.claimedAt || null,
+  }
+}
+
 function loadData() {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (!saved) return defaultState
@@ -135,10 +150,15 @@ function loadData() {
       ]),
     )
 
+    const normalizedRewards = Array.isArray(parsed.rewards)
+      ? parsed.rewards.map(normalizeReward).filter(Boolean)
+      : []
+
     return {
       goals: normalizedGoals,
       entries: normalizedEntries,
       dailyPlans: normalizedPlans,
+      rewards: normalizedRewards,
     }
   } catch {
     return defaultState
@@ -243,6 +263,10 @@ function App() {
   const [selectedHistoryEntry, setSelectedHistoryEntry] = useState(null)
   const [isHistoryEditMode, setIsHistoryEditMode] = useState(false)
   const [historyDraft, setHistoryDraft] = useState(null)
+  const [rewardTitleInput, setRewardTitleInput] = useState('')
+  const [rewardDescriptionInput, setRewardDescriptionInput] = useState('')
+  const [rewardRequiredLevelInput, setRewardRequiredLevelInput] = useState(1)
+  const [editingRewardId, setEditingRewardId] = useState(null)
 
   const todayEntry = data.entries[selectedDate] || createEmptyEntry(selectedDate)
 
@@ -469,6 +493,64 @@ function App() {
     return Array.isArray(tasks) ? tasks : []
   }
 
+
+  const sortedRewards = [...(data.rewards || [])].sort((a, b) => {
+    const aUnlocked = level >= a.requiredLevel && !a.claimed
+    const bUnlocked = level >= b.requiredLevel && !b.claimed
+    if (aUnlocked !== bUnlocked) return aUnlocked ? -1 : 1
+    return a.requiredLevel - b.requiredLevel
+  })
+  const unlockedRewardsCount = (data.rewards || []).filter((reward) => level >= reward.requiredLevel).length
+
+  const addOrUpdateReward = () => {
+    if (!rewardTitleInput.trim()) return
+    const payload = {
+      id: editingRewardId || safeId(),
+      title: rewardTitleInput.trim(),
+      description: rewardDescriptionInput.trim(),
+      requiredLevel: Math.max(1, Number(rewardRequiredLevelInput) || 1),
+      claimed: false,
+      createdAt: new Date().toISOString(),
+      claimedAt: null,
+    }
+
+    const existing = (data.rewards || []).find((r) => r.id === editingRewardId)
+    const merged = existing ? { ...existing, ...payload, claimed: existing.claimed, claimedAt: existing.claimedAt, createdAt: existing.createdAt } : payload
+    const nextRewards = editingRewardId
+      ? (data.rewards || []).map((reward) => (reward.id === editingRewardId ? merged : reward))
+      : [...(data.rewards || []), merged]
+
+    updateData({ ...data, rewards: nextRewards })
+    setRewardTitleInput('')
+    setRewardDescriptionInput('')
+    setRewardRequiredLevelInput(1)
+    setEditingRewardId(null)
+  }
+
+  const startEditReward = (reward) => {
+    setEditingRewardId(reward.id)
+    setRewardTitleInput(reward.title)
+    setRewardDescriptionInput(reward.description || '')
+    setRewardRequiredLevelInput(reward.requiredLevel)
+  }
+
+  const claimReward = (rewardId) => {
+    updateData({
+      ...data,
+      rewards: (data.rewards || []).map((reward) => reward.id === rewardId ? { ...reward, claimed: true, claimedAt: reward.claimedAt || new Date().toISOString() } : reward),
+    })
+  }
+
+  const deleteReward = (rewardId) => {
+    updateData({ ...data, rewards: (data.rewards || []).filter((reward) => reward.id !== rewardId) })
+    if (editingRewardId === rewardId) {
+      setEditingRewardId(null)
+      setRewardTitleInput('')
+      setRewardDescriptionInput('')
+      setRewardRequiredLevelInput(1)
+    }
+  }
+
   useEffect(() => {
     const handleEsc = (event) => {
       if (event.key === "Escape") setSelectedHistoryEntry(null)
@@ -662,6 +744,48 @@ function App() {
                 <DashboardCard title="Goal Progress Summary" value={`${goalsOverview.completed}/${goalsOverview.total} completed`}>
                   <ProgressBar percent={goalsOverview.avg} />
                 </DashboardCard>
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Rewards</h2>
+              <p className="mt-1 text-sm text-slate-600">Unlocked rewards: {unlockedRewardsCount} / {(data.rewards || []).length}</p>
+              <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-4">
+                <input value={rewardTitleInput} onChange={(e) => setRewardTitleInput(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reward title" />
+                <textarea value={rewardDescriptionInput} onChange={(e) => setRewardDescriptionInput(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" rows={2} placeholder="Reward description" />
+                <div className="flex gap-2">
+                  <input type="number" min="1" value={rewardRequiredLevelInput} onChange={(e) => setRewardRequiredLevelInput(e.target.value)} className="w-40 rounded-lg border border-slate-300 p-2" placeholder="Required level" />
+                  <button onClick={addOrUpdateReward} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{editingRewardId ? 'Save reward' : 'Add reward'}</button>
+                  {editingRewardId && <button onClick={() => { setEditingRewardId(null); setRewardTitleInput(''); setRewardDescriptionInput(''); setRewardRequiredLevelInput(1) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {sortedRewards.map((reward) => {
+                  const unlocked = level >= reward.requiredLevel
+                  const status = reward.claimed ? 'Claimed' : unlocked ? 'Unlocked' : 'Locked'
+                  return (
+                    <div key={reward.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold">{reward.title}</p>
+                          <p className="text-slate-600">{safeText(reward.description)}</p>
+                          <p className="mt-1 text-xs text-slate-500">Required level: {reward.requiredLevel}</p>
+                          <p className="mt-1 text-xs font-semibold">Status: {status}</p>
+                          {!unlocked && <p className="text-xs text-slate-500">Unlocks at Level {reward.requiredLevel}</p>}
+                          {reward.claimed && <p className="text-xs text-slate-500">Claimed at: {reward.claimedAt ? new Date(reward.claimedAt).toLocaleString() : 'Unknown'}</p>}
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => startEditReward(reward)} className="rounded bg-slate-100 px-2 py-1">Edit</button>
+                          {!reward.claimed && unlocked && <button onClick={() => claimReward(reward.id)} className="rounded bg-emerald-100 px-2 py-1 text-emerald-700">Claim reward</button>}
+                          {reward.claimed && <button disabled className="rounded bg-emerald-50 px-2 py-1 text-emerald-500">Claimed</button>}
+                          <button onClick={() => deleteReward(reward.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {sortedRewards.length === 0 && <p className="text-slate-500">No rewards added yet.</p>}
               </div>
             </section>
 
