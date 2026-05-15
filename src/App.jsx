@@ -362,6 +362,11 @@ function App() {
   const [newCategoryInput, setNewCategoryInput] = useState('')
   const [showCompletedTasks, setShowCompletedTasks] = useState(false)
   const [showCategoryManager, setShowCategoryManager] = useState(false)
+  const [showEntryBlockManager, setShowEntryBlockManager] = useState(false)
+  const [newBlockTitle, setNewBlockTitle] = useState('')
+  const [newBlockType, setNewBlockType] = useState('list')
+  const [newBlockXpValue, setNewBlockXpValue] = useState(10)
+  const [newBlockIsPenalty, setNewBlockIsPenalty] = useState(false)
   const [planXpInput, setPlanXpInput] = useState(10)
   const [planTimeBlockInput, setPlanTimeBlockInput] = useState('Anytime')
 
@@ -776,6 +781,50 @@ function App() {
     }
   }
 
+
+  const addEntryBlock = () => {
+    const title = newBlockTitle.trim()
+    if (!title) return
+    const nextBlock = {
+      id: safeId(),
+      title,
+      type: newBlockType === 'text' ? 'text' : 'list',
+      xpValue: Math.max(0, Number(newBlockXpValue) || 0),
+      isPenalty: Boolean(newBlockIsPenalty),
+      createdAt: new Date().toISOString(),
+    }
+    updateData({ ...data, entryBlocks: [...(data.entryBlocks || []), nextBlock] })
+    setNewBlockTitle('')
+    setNewBlockType('list')
+    setNewBlockXpValue(10)
+    setNewBlockIsPenalty(false)
+  }
+
+  const updateEntryBlockConfig = (blockId, updates) => {
+    updateData({
+      ...data,
+      entryBlocks: (data.entryBlocks || []).map((block) => {
+        if (block.id !== blockId) return block
+        const nextTitle = updates.title !== undefined ? String(updates.title) : block.title
+        const trimmedTitle = nextTitle.trim()
+        return {
+          ...block,
+          ...updates,
+          title: trimmedTitle || block.title,
+          xpValue: updates.xpValue !== undefined ? Math.max(0, Number(updates.xpValue) || 0) : block.xpValue,
+          type: updates.type !== undefined ? (updates.type === 'text' ? 'text' : 'list') : block.type,
+          isPenalty: updates.isPenalty !== undefined ? Boolean(updates.isPenalty) : block.isPenalty,
+        }
+      }),
+    })
+  }
+
+  const deleteEntryBlock = (blockId) => {
+    const blocks = data.entryBlocks || []
+    if (blocks.length <= 1) return
+    updateData({ ...data, entryBlocks: blocks.filter((block) => block.id !== blockId) })
+  }
+
   useEffect(() => {
     const handleEsc = (event) => {
       if (event.key === "Escape") setSelectedHistoryEntry(null)
@@ -845,6 +894,40 @@ function App() {
                     </div>
                   )
                 })}
+              </div>
+
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowEntryBlockManager((value) => !value)}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium"
+                >
+                  Manage Today Entry blocks ({(data.entryBlocks || []).length})
+                </button>
+
+                {showEntryBlockManager && (
+                  <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                    <div className="grid gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
+                      <input value={newBlockTitle} onChange={(e) => setNewBlockTitle(e.target.value)} className="rounded border border-slate-300 p-1.5" placeholder="Block title" />
+                      <select value={newBlockType} onChange={(e) => setNewBlockType(e.target.value)} className="rounded border border-slate-300 p-1.5"><option value="list">list</option><option value="text">text</option></select>
+                      <input type="number" min="0" value={newBlockXpValue} onChange={(e) => setNewBlockXpValue(e.target.value)} className="rounded border border-slate-300 p-1.5" placeholder="XP" />
+                      <select value={newBlockIsPenalty ? 'penalty' : 'positive'} onChange={(e) => setNewBlockIsPenalty(e.target.value === 'penalty')} className="rounded border border-slate-300 p-1.5"><option value="positive">positive</option><option value="penalty">penalty</option></select>
+                      <button onClick={addEntryBlock} className="rounded bg-slate-800 px-2 py-1.5 text-white">Add</button>
+                    </div>
+
+                    <div className="mt-2 space-y-1">
+                      {(data.entryBlocks || []).map((block) => (
+                        <div key={block.id} className="grid gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
+                          <input value={block.title} onChange={(e) => updateEntryBlockConfig(block.id, { title: e.target.value })} className="rounded border border-slate-300 p-1.5" />
+                          <select value={block.type} onChange={(e) => updateEntryBlockConfig(block.id, { type: e.target.value })} className="rounded border border-slate-300 p-1.5"><option value="list">list</option><option value="text">text</option></select>
+                          <input type="number" min="0" value={block.xpValue} onChange={(e) => updateEntryBlockConfig(block.id, { xpValue: e.target.value })} className="rounded border border-slate-300 p-1.5" />
+                          <select value={block.isPenalty ? 'penalty' : 'positive'} onChange={(e) => updateEntryBlockConfig(block.id, { isPenalty: e.target.value === 'penalty' })} className="rounded border border-slate-300 p-1.5"><option value="positive">positive</option><option value="penalty">penalty</option></select>
+                          <button onClick={() => deleteEntryBlock(block.id)} disabled={(data.entryBlocks || []).length <= 1} className="rounded bg-rose-100 px-2 py-1.5 text-rose-700 disabled:opacity-50">Delete</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
