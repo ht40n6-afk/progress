@@ -265,6 +265,7 @@ function App() {
   const [planCategoryInput, setPlanCategoryInput] = useState('Other')
   const [newCategoryInput, setNewCategoryInput] = useState('')
   const [showCompletedTasks, setShowCompletedTasks] = useState(false)
+  const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [planXpInput, setPlanXpInput] = useState(10)
 
   const [dashboardEditingGoalId, setDashboardEditingGoalId] = useState(null)
@@ -691,17 +692,28 @@ function App() {
                   <button onClick={addPlanTask} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">Add task</button>
                 </div>
               </div>
-              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm font-semibold">Manage categories</p>
-                <div className="mt-2 flex gap-2">
-                  <input value={newCategoryInput} onChange={(e) => setNewCategoryInput(e.target.value)} className="w-full rounded border border-slate-300 p-1 text-sm" placeholder="New category" />
-                  <button onClick={addTaskCategory} className="rounded bg-slate-800 px-2 py-1 text-sm text-white">Add</button>
-                </div>
-                <div className="mt-2 space-y-1">
-                  {categoryOptions.map((category) => (
-                    <CategoryRow key={category} category={category} canDelete={categoryOptions.length > 1 && category !== 'Other'} onRename={renameTaskCategory} onDelete={deleteTaskCategory} />
-                  ))}
-                </div>
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryManager((value) => !value)}
+                  className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium"
+                >
+                  <span>{showCategoryManager ? 'Hide categories' : 'Manage categories'} ({categoryOptions.length})</span>
+                </button>
+
+                {showCategoryManager && (
+                  <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                    <div className="flex flex-wrap gap-2">
+                      <input value={newCategoryInput} onChange={(e) => setNewCategoryInput(e.target.value)} className="min-w-40 flex-1 rounded border border-slate-300 p-1.5 text-sm" placeholder="New category" />
+                      <button onClick={addTaskCategory} className="rounded bg-slate-800 px-2 py-1.5 text-xs text-white">Add</button>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {categoryOptions.map((category) => (
+                        <CategoryRow key={category} category={category} canDelete={categoryOptions.length > 1 && category !== 'Other'} onRename={renameTaskCategory} onDelete={deleteTaskCategory} compact />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <p className="mt-3 text-sm font-semibold text-slate-600">Completed plan XP: {dailyPlanCompletedXP} / {dailyPlanTotalXP} XP (included in Total XP)</p>
@@ -1126,19 +1138,19 @@ function RewardGroup({ title, rewards, level, onEdit, onClaim, onDelete, claimed
 }
 
 
-function CategoryRow({ category, canDelete, onRename, onDelete }) {
+function CategoryRow({ category, canDelete, onRename, onDelete, compact = false }) {
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className={`flex items-center gap-2 ${compact ? 'text-xs' : 'text-sm'}`}>
       <input
         value={category}
         onChange={(e) => onRename(category, e.target.value)}
         disabled={category === 'Other'}
-        className="w-full rounded border border-slate-300 p-1 disabled:bg-slate-100"
+        className={`w-full rounded border border-slate-300 ${compact ? 'p-1 text-xs' : 'p-1'} disabled:bg-slate-100`}
       />
       <button
         onClick={() => onDelete(category)}
         disabled={!canDelete}
-        className="rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50"
+        className={`rounded bg-rose-100 text-rose-700 disabled:opacity-50 ${compact ? 'px-2 py-1 text-xs' : 'px-2 py-1'}`}
       >
         Delete
       </button>
