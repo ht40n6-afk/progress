@@ -101,7 +101,7 @@ function normalizeEntry(rawEntry, date, entryBlocks = getDefaultEntryBlocks()) {
     xpEarned: Number(entry.xpEarned) || 0,
     blockValues,
   }
-  normalized.xpEarned = calculateEntryXP(normalized)
+  normalized.xpEarned = calculateEntryXP(normalized, entryBlocks)
   return normalized
 }
 
@@ -134,7 +134,7 @@ function calculateCompletedTaskXP(tasks) {
 
 function calculateDayXP(date, data) {
   const entry = data?.entries?.[date]
-  const entryXP = entry ? calculateEntryXP(entry) : 0
+  const entryXP = entry ? calculateEntryXP(entry, data?.entryBlocks) : 0
   const completedTaskXP = calculateCompletedTaskXP(data?.dailyPlans?.[date])
   return { entryXP, completedTaskXP, totalXP: entryXP + completedTaskXP }
 }
@@ -246,18 +246,41 @@ function saveData(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
 }
 
-function calculateEntryXP(entry) {
+function calculateEntryXP(entry, entryBlocks = getDefaultEntryBlocks()) {
   if (!entry) return 0
 
-  const achievementXP = entry.achievements.length * XP_RULES.achievement
-  const gratitudeXP = entry.gratitude.length * XP_RULES.gratitude
-  const goalNoteXP = entry.goalNotes.length * XP_RULES.goalNote
-  const badActionXP = (entry.badActions || []).length * 10
-  const lessonXP = entry.lesson.trim() ? XP_RULES.lesson : 0
+  const blocks = Array.isArray(entryBlocks) && entryBlocks.length ? entryBlocks : getDefaultEntryBlocks()
+  const blockValues = entry.blockValues && typeof entry.blockValues === 'object' ? entry.blockValues : {}
 
-  return achievementXP + gratitudeXP + goalNoteXP + lessonXP - badActionXP
+  const listFromLegacy = (id) => {
+    if (id === 'achievements') return Array.isArray(entry.achievements) ? entry.achievements : []
+    if (id === 'gratitude') return Array.isArray(entry.gratitude) ? entry.gratitude : []
+    if (id === 'goalNotes') return Array.isArray(entry.goalNotes) ? entry.goalNotes : []
+    if (id === 'badActions') return Array.isArray(entry.badActions) ? entry.badActions : []
+    return []
+  }
+
+  const textFromLegacy = (id) => {
+    if (id === 'lesson') return typeof entry.lesson === 'string' ? entry.lesson : ''
+    return ''
+  }
+
+  return blocks.reduce((total, block) => {
+    let blockXp = 0
+
+    if (block.type === 'list') {
+      const raw = blockValues[block.id]
+      const items = Array.isArray(raw) ? raw : listFromLegacy(block.id)
+      blockXp = items.length * (Number(block.xpValue) >= 0 ? Number(block.xpValue) : 0)
+    } else {
+      const raw = blockValues[block.id]
+      const text = typeof raw === 'string' ? raw : textFromLegacy(block.id)
+      blockXp = text.trim() ? (Number(block.xpValue) >= 0 ? Number(block.xpValue) : 0) : 0
+    }
+
+    return total + (block.isPenalty ? -blockXp : blockXp)
+  }, 0)
 }
-
 
 function calculateCurrentStreak(entries) {
   const dates = new Set(Object.keys(entries))
