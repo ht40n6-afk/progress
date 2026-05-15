@@ -511,6 +511,49 @@ function App() {
     })
   }
 
+
+  const getEntryBlockValue = (entry, block) => {
+    const values = entry?.blockValues || {}
+    const value = values[block.id]
+    if (block.type === 'list') {
+      if (Array.isArray(value)) return value
+      if (block.id === 'achievements') return ensureArray(entry?.achievements)
+      if (block.id === 'gratitude') return ensureArray(entry?.gratitude)
+      if (block.id === 'goalNotes') return ensureArray(entry?.goalNotes)
+      if (block.id === 'badActions') return ensureArray(entry?.badActions)
+      return []
+    }
+    if (typeof value === 'string') return value
+    if (block.id === 'lesson') return safeText(entry?.lesson, '')
+    return ''
+  }
+
+  const blockXpLabel = (block) => {
+    const sign = block.isPenalty ? '-' : '+'
+    if (block.type === 'list') return `${sign}${block.xpValue} XP each`
+    return `${sign}${block.xpValue} XP`
+  }
+
+  const updateEntryBlockValue = (blockId, value) => {
+    const currentValues = todayEntry.blockValues || {}
+    const updatedEntry = {
+      ...todayEntry,
+      blockValues: {
+        ...currentValues,
+        [blockId]: value,
+      },
+    }
+
+    // keep legacy mirrors for backward compatibility while old UI/paths still exist
+    if (blockId === 'achievements') updatedEntry.achievements = value
+    if (blockId === 'gratitude') updatedEntry.gratitude = value
+    if (blockId === 'goalNotes') updatedEntry.goalNotes = value
+    if (blockId === 'badActions') updatedEntry.badActions = value
+    if (blockId === 'lesson') updatedEntry.lesson = value
+
+    updateTodayEntry(updatedEntry)
+  }
+
   const addListItem = (field, value, setValue) => {
     if (!value.trim()) return
     updateTodayEntry({
@@ -773,14 +816,35 @@ function App() {
             <section className="rounded-2xl bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">1. Today Entry ({selectedDate})</h2><input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="rounded-lg border border-slate-300 p-2 text-sm" /></div>
               <div className="mt-4 space-y-4">
-                <EntryInput label="Achievements" value={achievementInput} setValue={setAchievementInput} onAdd={() => addListItem('achievements', achievementInput, setAchievementInput)} onRemove={(index) => removeListItem('achievements', index)} items={todayEntry.achievements} xpText="+10 XP each" />
-                <EntryInput label="Gratitude" value={gratitudeInput} setValue={setGratitudeInput} onAdd={() => addListItem('gratitude', gratitudeInput, setGratitudeInput)} onRemove={(index) => removeListItem('gratitude', index)} items={todayEntry.gratitude} xpText="+5 XP each" />
-                <EntryInput label="Goal Progress Notes" value={goalNoteInput} setValue={setGoalNoteInput} onAdd={() => addListItem('goalNotes', goalNoteInput, setGoalNoteInput)} onRemove={(index) => removeListItem('goalNotes', index)} items={todayEntry.goalNotes} xpText="+15 XP each" />
-                <EntryInput label="Things I should not have done" value={badActionInput} setValue={setBadActionInput} onAdd={() => addListItem('badActions', badActionInput, setBadActionInput)} onRemove={(index) => removeListItem('badActions', index)} items={todayEntry.badActions || []} xpText="-10 XP each" />
-                <div>
-                  <label className="mb-1 block font-medium">Lesson of the Day (+20 XP)</label>
-                  <textarea value={todayEntry.lesson} onChange={(e) => updateTodayEntry({ ...todayEntry, lesson: e.target.value })} className="w-full rounded-lg border border-slate-300 p-2" rows={3} placeholder="What did you learn today?" />
-                </div>
+                {data.entryBlocks.map((block) => {
+                  const value = getEntryBlockValue(todayEntry, block)
+
+                  if (block.type === 'list') {
+                    return (
+                      <DynamicListBlock
+                        key={block.id}
+                        title={block.title}
+                        xpText={blockXpLabel(block)}
+                        items={value}
+                        onAdd={(itemText) => updateEntryBlockValue(block.id, [...value, itemText])}
+                        onRemove={(indexToRemove) => updateEntryBlockValue(block.id, value.filter((_, index) => index !== indexToRemove))}
+                      />
+                    )
+                  }
+
+                  return (
+                    <div key={block.id}>
+                      <label className="mb-1 block font-medium">{block.title} ({blockXpLabel(block)})</label>
+                      <textarea
+                        value={value}
+                        onChange={(e) => updateEntryBlockValue(block.id, e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 p-2"
+                        rows={3}
+                        placeholder={`Add ${block.title.toLowerCase()}`}
+                      />
+                    </div>
+                  )
+                })}
               </div>
             </section>
 
@@ -1160,6 +1224,41 @@ function App() {
         )}
 
       </div>
+    </div>
+  )
+}
+
+
+function DynamicListBlock({ title, xpText, items, onAdd, onRemove }) {
+  const [input, setInput] = useState('')
+
+  const addItem = () => {
+    const trimmed = input.trim()
+    if (!trimmed) return
+    onAdd(trimmed)
+    setInput('')
+  }
+
+  return (
+    <div>
+      <label className="mb-1 block font-medium">{title} ({xpText})</label>
+      <div className="flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          className="w-full rounded-lg border border-slate-300 p-2"
+          placeholder={`Add ${title.toLowerCase()}`}
+        />
+        <button onClick={addItem} className="rounded-lg bg-slate-800 px-3 py-2 text-white">Add</button>
+      </div>
+      <ul className="mt-2 space-y-1 pl-1 text-sm">
+        {items.map((item, index) => (
+          <li key={index} className="flex items-center justify-between rounded bg-slate-100 px-2 py-1">
+            <span>{item}</span>
+            <button onClick={() => onRemove(index)} className="rounded bg-rose-100 px-2 py-0.5 text-rose-700">X</button>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
