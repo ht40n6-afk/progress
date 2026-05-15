@@ -117,6 +117,7 @@ function normalizeReward(rawReward) {
     claimed: Boolean(rawReward.claimed),
     createdAt: rawReward.createdAt || new Date().toISOString(),
     claimedAt: rawReward.claimedAt || null,
+    imageData: typeof rawReward.imageData === 'string' ? rawReward.imageData : null,
   }
 }
 
@@ -267,6 +268,8 @@ function App() {
   const [rewardDescriptionInput, setRewardDescriptionInput] = useState('')
   const [rewardRequiredLevelInput, setRewardRequiredLevelInput] = useState(1)
   const [editingRewardId, setEditingRewardId] = useState(null)
+  const [rewardImageData, setRewardImageData] = useState(null)
+  const [removeRewardImage, setRemoveRewardImage] = useState(false)
 
   const todayEntry = data.entries[selectedDate] || createEmptyEntry(selectedDate)
 
@@ -501,6 +504,22 @@ function App() {
     return a.requiredLevel - b.requiredLevel
   })
   const unlockedRewardsCount = (data.rewards || []).filter((reward) => level >= reward.requiredLevel).length
+  const availableRewards = sortedRewards.filter((reward) => !reward.claimed && level >= reward.requiredLevel)
+  const lockedRewards = sortedRewards.filter((reward) => !reward.claimed && level < reward.requiredLevel)
+  const claimedRewards = sortedRewards.filter((reward) => reward.claimed)
+
+
+  const handleRewardImageChange = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setRewardImageData(typeof reader.result === 'string' ? reader.result : null)
+      setRemoveRewardImage(false)
+    }
+    reader.readAsDataURL(file)
+  }
 
   const addOrUpdateReward = () => {
     if (!rewardTitleInput.trim()) return
@@ -512,10 +531,12 @@ function App() {
       claimed: false,
       createdAt: new Date().toISOString(),
       claimedAt: null,
+      imageData: rewardImageData,
     }
 
     const existing = (data.rewards || []).find((r) => r.id === editingRewardId)
-    const merged = existing ? { ...existing, ...payload, claimed: existing.claimed, claimedAt: existing.claimedAt, createdAt: existing.createdAt } : payload
+    const mergedImageData = removeRewardImage ? null : (rewardImageData ?? existing?.imageData ?? null)
+    const merged = existing ? { ...existing, ...payload, imageData: mergedImageData, claimed: existing.claimed, claimedAt: existing.claimedAt, createdAt: existing.createdAt } : { ...payload, imageData: rewardImageData }
     const nextRewards = editingRewardId
       ? (data.rewards || []).map((reward) => (reward.id === editingRewardId ? merged : reward))
       : [...(data.rewards || []), merged]
@@ -525,6 +546,8 @@ function App() {
     setRewardDescriptionInput('')
     setRewardRequiredLevelInput(1)
     setEditingRewardId(null)
+    setRewardImageData(null)
+    setRemoveRewardImage(false)
   }
 
   const startEditReward = (reward) => {
@@ -532,6 +555,8 @@ function App() {
     setRewardTitleInput(reward.title)
     setRewardDescriptionInput(reward.description || '')
     setRewardRequiredLevelInput(reward.requiredLevel)
+    setRewardImageData(reward.imageData || null)
+    setRemoveRewardImage(false)
   }
 
   const claimReward = (rewardId) => {
@@ -545,9 +570,13 @@ function App() {
     updateData({ ...data, rewards: (data.rewards || []).filter((reward) => reward.id !== rewardId) })
     if (editingRewardId === rewardId) {
       setEditingRewardId(null)
+    setRewardImageData(null)
+    setRemoveRewardImage(false)
       setRewardTitleInput('')
       setRewardDescriptionInput('')
       setRewardRequiredLevelInput(1)
+      setRewardImageData(null)
+      setRemoveRewardImage(false)
     }
   }
 
@@ -749,44 +778,27 @@ function App() {
 
             <section className="rounded-2xl bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Rewards</h2>
-              <p className="mt-1 text-sm text-slate-600">Unlocked rewards: {unlockedRewardsCount} / {(data.rewards || []).length}</p>
+              <p className="mt-1 text-sm text-slate-600">Current Level: {level} · Rewards unlocked: {unlockedRewardsCount} / {(data.rewards || []).length}</p>
               <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-4">
                 <input value={rewardTitleInput} onChange={(e) => setRewardTitleInput(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reward title" />
                 <textarea value={rewardDescriptionInput} onChange={(e) => setRewardDescriptionInput(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" rows={2} placeholder="Reward description" />
-                <div className="flex gap-2">
-                  <input type="number" min="1" value={rewardRequiredLevelInput} onChange={(e) => setRewardRequiredLevelInput(e.target.value)} className="w-40 rounded-lg border border-slate-300 p-2" placeholder="Required level" />
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <input type="number" min="1" value={rewardRequiredLevelInput} onChange={(e) => setRewardRequiredLevelInput(e.target.value)} className="rounded-lg border border-slate-300 p-2" placeholder="Required level" />
+                  <input type="file" accept="image/*" onChange={handleRewardImageChange} className="rounded-lg border border-slate-300 p-2 text-sm" />
                   <button onClick={addOrUpdateReward} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{editingRewardId ? 'Save reward' : 'Add reward'}</button>
-                  {editingRewardId && <button onClick={() => { setEditingRewardId(null); setRewardTitleInput(''); setRewardDescriptionInput(''); setRewardRequiredLevelInput(1) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
                 </div>
+                {rewardImageData && (
+                  <div className="flex items-center gap-3">
+                    <img src={rewardImageData} alt="Reward preview" className="h-16 w-24 rounded object-cover" />
+                    <button onClick={() => { setRewardImageData(null); setRemoveRewardImage(true) }} className="rounded bg-rose-100 px-2 py-1 text-sm text-rose-700">Remove image</button>
+                  </div>
+                )}
+                {editingRewardId && <button onClick={() => { setEditingRewardId(null); setRewardTitleInput(''); setRewardDescriptionInput(''); setRewardRequiredLevelInput(1); setRewardImageData(null); setRemoveRewardImage(false) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
               </div>
 
-              <div className="mt-4 space-y-3">
-                {sortedRewards.map((reward) => {
-                  const unlocked = level >= reward.requiredLevel
-                  const status = reward.claimed ? 'Claimed' : unlocked ? 'Unlocked' : 'Locked'
-                  return (
-                    <div key={reward.id} className="rounded-lg border border-slate-200 p-3 text-sm">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-semibold">{reward.title}</p>
-                          <p className="text-slate-600">{safeText(reward.description)}</p>
-                          <p className="mt-1 text-xs text-slate-500">Required level: {reward.requiredLevel}</p>
-                          <p className="mt-1 text-xs font-semibold">Status: {status}</p>
-                          {!unlocked && <p className="text-xs text-slate-500">Unlocks at Level {reward.requiredLevel}</p>}
-                          {reward.claimed && <p className="text-xs text-slate-500">Claimed at: {reward.claimedAt ? new Date(reward.claimedAt).toLocaleString() : 'Unknown'}</p>}
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => startEditReward(reward)} className="rounded bg-slate-100 px-2 py-1">Edit</button>
-                          {!reward.claimed && unlocked && <button onClick={() => claimReward(reward.id)} className="rounded bg-emerald-100 px-2 py-1 text-emerald-700">Claim reward</button>}
-                          {reward.claimed && <button disabled className="rounded bg-emerald-50 px-2 py-1 text-emerald-500">Claimed</button>}
-                          <button onClick={() => deleteReward(reward.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-                {sortedRewards.length === 0 && <p className="text-slate-500">No rewards added yet.</p>}
-              </div>
+              <RewardGroup title="Available to claim" rewards={availableRewards} level={level} onEdit={startEditReward} onClaim={claimReward} onDelete={deleteReward} />
+              <RewardGroup title="Locked" rewards={lockedRewards} level={level} onEdit={startEditReward} onClaim={claimReward} onDelete={deleteReward} />
+              <RewardGroup title="Claimed" rewards={claimedRewards} level={level} onEdit={startEditReward} onClaim={claimReward} onDelete={deleteReward} claimed />
             </section>
 
             <section className="rounded-2xl bg-white p-6 shadow-sm">
@@ -990,6 +1002,42 @@ function TaskPreviewSection({ title, tasks }) {
       ) : (
         <p className="text-slate-700">No tasks planned.</p>
       )}
+    </div>
+  )
+}
+
+
+function RewardGroup({ title, rewards, level, onEdit, onClaim, onDelete, claimed = false }) {
+  return (
+    <div className="mt-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
+      <div className="mt-2 space-y-3">
+        {rewards.map((reward) => {
+          const unlocked = level >= reward.requiredLevel
+          return (
+            <div key={reward.id} className={`rounded-lg border border-slate-200 p-3 text-sm ${claimed ? 'opacity-70' : ''}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  {reward.imageData ? (
+                    <img src={reward.imageData} alt={reward.title} className="mb-2 h-24 w-full max-w-xs rounded object-cover" />
+                  ) : null}
+                  <p className="font-semibold">{reward.title}</p>
+                  <p className="text-slate-600">{safeText(reward.description)}</p>
+                  <p className="mt-1 text-xs text-slate-500">Required level: {reward.requiredLevel}</p>
+                  {!reward.claimed && !unlocked && <p className="text-xs text-slate-500">{reward.requiredLevel - level} level(s) needed</p>}
+                  {reward.claimed && <p className="mt-1 inline-block rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Claimed{reward.claimedAt ? ` · ${new Date(reward.claimedAt).toLocaleDateString()}` : ''}</p>}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => onEdit(reward)} className="rounded bg-slate-100 px-2 py-1">Edit</button>
+                  {!reward.claimed && unlocked && <button onClick={() => onClaim(reward.id)} className="rounded bg-emerald-100 px-2 py-1 text-emerald-700">Claim reward</button>}
+                  <button onClick={() => onDelete(reward.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        {rewards.length === 0 && <p className="text-slate-500">No rewards in this group.</p>}
+      </div>
     </div>
   )
 }
