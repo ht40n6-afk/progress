@@ -631,17 +631,37 @@ function App() {
   }
 
 
+
+  const getHistoryBlockValue = (entry, block) => {
+    const values = entry?.blockValues || {}
+    const value = values[block.id]
+    if (block.type === 'list') {
+      if (Array.isArray(value)) return value
+      if (block.id === 'achievements') return ensureArray(entry?.achievements)
+      if (block.id === 'gratitude') return ensureArray(entry?.gratitude)
+      if (block.id === 'goalNotes') return ensureArray(entry?.goalNotes)
+      if (block.id === 'badActions') return ensureArray(entry?.badActions)
+      return []
+    }
+    if (typeof value === 'string') return value
+    if (block.id === 'lesson') return safeText(entry?.lesson, '')
+    return ''
+  }
+
+  const entryBlockListToText = (entry, block) => getHistoryBlockValue(entry, block).join('\n')
+
   const openHistoryModal = (date) => {
     const entry = data.entries[date]
     if (!entry) return
     const selected = { date, ...entry }
     setSelectedHistoryEntry(selected)
+    const blockDraftValues = {}
+    ;(data.entryBlocks || []).forEach((block) => {
+      blockDraftValues[block.id] = block.type === 'list' ? entryBlockListToText(selected, block) : getHistoryBlockValue(selected, block)
+    })
     setHistoryDraft({
       ...selected,
-      achievementsText: ensureArray(selected.achievements).join('\n'),
-      gratitudeText: ensureArray(selected.gratitude).join('\n'),
-      goalNotesText: ensureArray(selected.goalNotes).join('\n'),
-      badActionsText: ensureArray(selected.badActions).join('\n'),
+      blockDraftValues,
     })
     setIsHistoryEditMode(false)
   }
@@ -661,14 +681,22 @@ function App() {
 
   const saveHistoryEdit = () => {
     if (!historyDraft) return
+
+    const nextBlockValues = {}
+    ;(data.entryBlocks || []).forEach((block) => {
+      const raw = historyDraft?.blockDraftValues?.[block.id]
+      nextBlockValues[block.id] = block.type === 'list' ? toList(raw) : (typeof raw === 'string' ? raw : '')
+    })
+
     const updatedEntry = normalizeEntry({
       ...historyDraft,
-      achievements: toList(historyDraft.achievementsText),
-      gratitude: toList(historyDraft.gratitudeText),
-      goalNotes: toList(historyDraft.goalNotesText),
-      badActions: toList(historyDraft.badActionsText),
-      lesson: historyDraft.lesson || '',
-    }, historyDraft.date)
+      blockValues: nextBlockValues,
+      achievements: nextBlockValues.achievements ?? ensureArray(historyDraft.achievements),
+      gratitude: nextBlockValues.gratitude ?? ensureArray(historyDraft.gratitude),
+      goalNotes: nextBlockValues.goalNotes ?? ensureArray(historyDraft.goalNotes),
+      badActions: nextBlockValues.badActions ?? ensureArray(historyDraft.badActions),
+      lesson: typeof nextBlockValues.lesson === 'string' ? nextBlockValues.lesson : safeText(historyDraft.lesson, ''),
+    }, historyDraft.date, data.entryBlocks)
 
     const nextData = {
       ...data,
@@ -679,13 +707,18 @@ function App() {
     }
     updateData(nextData)
     setSelectedHistoryEntry({ date: historyDraft.date, ...updatedEntry })
+
+    const refreshedBlockDraftValues = {}
+    ;(data.entryBlocks || []).forEach((block) => {
+      refreshedBlockDraftValues[block.id] = block.type === 'list'
+        ? getHistoryBlockValue(updatedEntry, block).join('\n')
+        : getHistoryBlockValue(updatedEntry, block)
+    })
+
     setHistoryDraft({
       ...historyDraft,
       ...updatedEntry,
-      achievementsText: updatedEntry.achievements.join('\n'),
-      gratitudeText: updatedEntry.gratitude.join('\n'),
-      goalNotesText: updatedEntry.goalNotes.join('\n'),
-      badActionsText: ensureArray(updatedEntry.badActions).join('\n'),
+      blockDraftValues: refreshedBlockDraftValues,
     })
     setIsHistoryEditMode(false)
   }
@@ -1173,16 +1206,15 @@ function App() {
                     className="w-full rounded-lg border border-transparent p-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
                   >
                     <p className="font-semibold">{historyDate} • XP: {calculateDayXP(historyDate, data).totalXP}</p>
-                    <div className="mt-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements preview</p>
-                      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-slate-700">
-                        {(ensureArray(data.entries[historyDate].achievements).length ? ensureArray(data.entries[historyDate].achievements).slice(0, 2) : ['Not provided']).map((item, index) => (
-                          <li key={index}>{item}</li>
-                        ))}
-                      </ul>
+                    <div className="mt-2 space-y-1">
+                      {(data.entryBlocks || []).slice(0, 3).map((block) => {
+                        const blockValue = getHistoryBlockValue(data.entries[historyDate], block)
+                        const preview = block.type === 'list'
+                          ? (blockValue.length ? blockValue.slice(0, 2).join(', ') : 'Not provided')
+                          : safeText(blockValue)
+                        return <p key={block.id} className={`text-xs ${block.isPenalty ? 'text-rose-600' : 'text-slate-600'}`}><span className="font-semibold">{block.title}:</span> {preview}</p>
+                      })}
                     </div>
-                    <p className="mt-2"><span className="font-medium">Lesson preview:</span> {safeText(data.entries[historyDate].lesson)}</p>
-                    <p className="mt-1 text-xs text-rose-600">Bad actions: {(ensureArray(data.entries[historyDate].badActions).length ? ensureArray(data.entries[historyDate].badActions).slice(0, 2).join(', ') : 'Not provided')}</p>
                     <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-indigo-600">View details →</p>
                   </button>
                 ) : <p className="text-slate-500">No saved entry for this date.</p>}
@@ -1274,7 +1306,7 @@ function App() {
                   ) : (
                     <div className="flex gap-2">
                       <button type="button" onClick={saveHistoryEdit} className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white">Save</button>
-                      <button type="button" onClick={() => { setIsHistoryEditMode(false); setHistoryDraft({ ...selectedHistoryEntry, achievementsText: ensureArray(selectedHistoryEntry.achievements).join('\n'), gratitudeText: ensureArray(selectedHistoryEntry.gratitude).join('\n'), goalNotesText: ensureArray(selectedHistoryEntry.goalNotes).join('\n'), badActionsText: ensureArray(selectedHistoryEntry.badActions).join('\n') }) }} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Cancel</button>
+                      <button type="button" onClick={() => { setIsHistoryEditMode(false); setHistoryDraft({ ...selectedHistoryEntry, blockDraftValues: Object.fromEntries((data.entryBlocks || []).map((block) => [block.id, block.type === 'list' ? getHistoryBlockValue(selectedHistoryEntry, block).join('\n') : getHistoryBlockValue(selectedHistoryEntry, block)])) }) }} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Cancel</button>
                     </div>
                   )}
                 </div>
@@ -1359,9 +1391,9 @@ function ScoreCard({ title, value }) {
   return <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p><p className="mt-1 text-lg font-semibold">{displayValue}</p></div>
 }
 
-function ModalSection({ title, value }) {
+function ModalSection({ title, value, penalty = false }) {
   const displayValue = Array.isArray(value) ? (value.length ? value.join(', ') : 'Not provided') : safeText(value)
-  return <div className="rounded-lg bg-slate-50 p-3"><p className="font-semibold">{title}</p><p className="text-slate-700">{displayValue}</p></div>
+  return <div className={`rounded-lg p-3 ${penalty ? 'bg-rose-50' : 'bg-slate-50'}`}><p className={`font-semibold ${penalty ? 'text-rose-700' : ''}`}>{title}</p><p className="text-slate-700">{displayValue}</p></div>
 }
 
 
@@ -1373,8 +1405,8 @@ function FormInput({ label, value, onChange, type = 'text' }) {
   return <div><label className="mb-1 block font-semibold">{label}</label><input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" /></div>
 }
 
-function BulletSection({ title, items }) {
-  return <div className="rounded-lg bg-slate-50 p-3"><p className="font-semibold">{title}</p>{items.length ? <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-700">{items.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p className="text-slate-700">Not provided</p>}</div>
+function BulletSection({ title, items, penalty = false }) {
+  return <div className={`rounded-lg p-3 ${penalty ? 'bg-rose-50' : 'bg-slate-50'}`}><p className={`font-semibold ${penalty ? 'text-rose-700' : ''}`}>{title}</p>{items.length ? <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-700">{items.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p className="text-slate-700">Not provided</p>}</div>
 }
 
 
