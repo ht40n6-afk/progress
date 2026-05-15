@@ -76,6 +76,18 @@ function taskXpValue(task) {
   return Number(task?.xp) >= 0 ? Number(task.xp) : 10
 }
 
+function calculateCompletedTaskXP(tasks) {
+  if (!Array.isArray(tasks)) return 0
+  return tasks.filter((task) => task?.completed).reduce((sum, task) => sum + taskXpValue(task), 0)
+}
+
+function calculateDayXP(date, data) {
+  const entry = data?.entries?.[date]
+  const entryXP = entry ? calculateEntryXP(entry) : 0
+  const completedTaskXP = calculateCompletedTaskXP(data?.dailyPlans?.[date])
+  return { entryXP, completedTaskXP, totalXP: entryXP + completedTaskXP }
+}
+
 function safeId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   return `goal-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -218,15 +230,20 @@ function calculateCurrentStreak(entries) {
   return streak
 }
 
-function calculateWeeklyXP(entries) {
+function calculateWeeklyXP(data) {
   const today = new Date()
   const weekAgo = new Date()
   weekAgo.setDate(today.getDate() - 6)
 
-  return Object.entries(entries).reduce((sum, [date, entry]) => {
+  const allDates = new Set([
+    ...Object.keys(data?.entries || {}),
+    ...Object.keys(data?.dailyPlans || {}),
+  ])
+
+  return Array.from(allDates).reduce((sum, date) => {
     const entryDate = new Date(`${date}T00:00:00`)
     if (entryDate >= weekAgo && entryDate <= today) {
-      return sum + calculateEntryXP(entry)
+      return sum + calculateDayXP(date, data).totalXP
     }
     return sum
   }, 0)
@@ -385,16 +402,18 @@ function App() {
   const dailyPlanCompletedXP = planForSelectedDate.filter((task) => task.completed).reduce((sum, task) => sum + taskXpValue(task), 0)
 
   const totalXP = useMemo(() => {
-    const entryXP = Object.values(data.entries).reduce((sum, entry) => sum + calculateEntryXP(entry), 0)
-    const planXP = Object.values(data.dailyPlans || {}).flat().filter((task) => task.completed).reduce((sum, task) => sum + taskXpValue(task), 0)
-    return entryXP + planXP
-  }, [data.entries, data.dailyPlans])
+    const allDates = new Set([
+      ...Object.keys(data.entries || {}),
+      ...Object.keys(data.dailyPlans || {}),
+    ])
+    return Array.from(allDates).reduce((sum, date) => sum + calculateDayXP(date, data).totalXP, 0)
+  }, [data])
 
   const level = Math.floor(totalXP / 100) + 1
   const xpInCurrentLevel = totalXP % 100
   const xpToNextLevel = 100 - xpInCurrentLevel
   const streak = calculateCurrentStreak(data.entries)
-  const weeklyXP = calculateWeeklyXP(data.entries)
+  const weeklyXP = calculateWeeklyXP(data)
   const goalsOverview = goalSummary(data.goals)
   const activeGoals = data.goals.filter((goal) => goal.status !== 'Completed')
   const completedGoals = data.goals.filter((goal) => goal.status === 'Completed')
@@ -929,7 +948,7 @@ function App() {
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHistoryModal(historyDate) } }}
                     className="w-full rounded-lg border border-transparent p-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
                   >
-                    <p className="font-semibold">{historyDate} • XP: {data.entries[historyDate].xpEarned}</p>
+                    <p className="font-semibold">{historyDate} • XP: {calculateDayXP(historyDate, data).totalXP}</p>
                     <div className="mt-2">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements preview</p>
                       <ul className="mt-1 list-disc space-y-0.5 pl-5 text-slate-700">
@@ -1019,7 +1038,12 @@ function App() {
                 <div className="flex items-center justify-between">
                   <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">XP Earned</p>
-                    <p className="text-xl font-bold text-indigo-700">{selectedHistoryEntry.xpEarned ?? 0}</p>
+                    <p className="text-xl font-bold text-indigo-700">{calculateDayXP(selectedHistoryEntry.date, data).totalXP}</p>
+                    <div className="mt-2 text-xs text-indigo-700">
+                      <p>Today Entry XP: {calculateDayXP(selectedHistoryEntry.date, data).entryXP}</p>
+                      <p>Completed Task XP: {calculateDayXP(selectedHistoryEntry.date, data).completedTaskXP}</p>
+                      <p className="font-semibold">Total Day XP: {calculateDayXP(selectedHistoryEntry.date, data).totalXP}</p>
+                    </div>
                   </div>
                   {!isHistoryEditMode ? (
                     <button type="button" onClick={() => setIsHistoryEditMode(true)} className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white">Edit</button>
