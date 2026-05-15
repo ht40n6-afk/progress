@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 
 const STORAGE_KEY = 'life-gamification-tracker-v1'
 
-const PLAN_CATEGORIES = ['Work', 'Health', 'Personal', 'Learning', 'Admin', 'Other']
+const DEFAULT_TASK_CATEGORIES = ['Work', 'Health', 'Personal', 'Learning', 'Admin', 'Other']
 
 const XP_RULES = {
   achievement: 10,
   gratitude: 5,
   goalNote: 15,
-  moodEnergy: 5,
   lesson: 20,
 }
 
@@ -19,6 +18,7 @@ const defaultState = {
   entries: {},
   dailyPlans: {},
   rewards: [],
+  taskCategories: DEFAULT_TASK_CATEGORIES,
 }
 
 
@@ -28,6 +28,7 @@ function createEmptyEntry(date) {
     achievements: [],
     gratitude: [],
     goalNotes: [],
+    badActions: [],
     mood: 5,
     energy: 5,
     lesson: '',
@@ -42,6 +43,7 @@ function normalizeEntry(rawEntry, date) {
     achievements: Array.isArray(entry.achievements) ? entry.achievements : [],
     gratitude: Array.isArray(entry.gratitude) ? entry.gratitude : [],
     goalNotes: Array.isArray(entry.goalNotes) ? entry.goalNotes : [],
+    badActions: Array.isArray(entry.badActions) ? entry.badActions : [],
     mood: Number(entry.mood) || 5,
     energy: Number(entry.energy) || 5,
     lesson: typeof entry.lesson === 'string' ? entry.lesson : '',
@@ -143,13 +145,18 @@ function loadData() {
               id: task?.id || safeId(),
               text: typeof task?.text === 'string' ? task.text : '',
               completed: Boolean(task?.completed),
-              category: PLAN_CATEGORIES.includes(task?.category) ? task.category : 'Other',
+              category: task?.category && typeof task.category === 'string' ? task.category : 'Other',
               xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
               createdAt: task?.createdAt || new Date().toISOString(),
             })).filter((task) => task.text.trim())
           : [],
       ]),
     )
+
+    const normalizedTaskCategories = Array.isArray(parsed.taskCategories)
+      ? Array.from(new Set(parsed.taskCategories.filter((c) => typeof c === 'string' && c.trim()).map((c) => c.trim())))
+      : DEFAULT_TASK_CATEGORIES
+    const finalTaskCategories = normalizedTaskCategories.length ? (normalizedTaskCategories.includes('Other') ? normalizedTaskCategories : [...normalizedTaskCategories, 'Other']) : DEFAULT_TASK_CATEGORIES
 
     const normalizedRewards = Array.isArray(parsed.rewards)
       ? parsed.rewards.map(normalizeReward).filter(Boolean)
@@ -160,6 +167,7 @@ function loadData() {
       entries: normalizedEntries,
       dailyPlans: normalizedPlans,
       rewards: normalizedRewards,
+      taskCategories: finalTaskCategories,
     }
   } catch {
     return defaultState
@@ -176,10 +184,10 @@ function calculateEntryXP(entry) {
   const achievementXP = entry.achievements.length * XP_RULES.achievement
   const gratitudeXP = entry.gratitude.length * XP_RULES.gratitude
   const goalNoteXP = entry.goalNotes.length * XP_RULES.goalNote
-  const moodEnergyXP = entry.mood && entry.energy ? XP_RULES.moodEnergy : 0
+  const badActionXP = (entry.badActions || []).length * 10
   const lessonXP = entry.lesson.trim() ? XP_RULES.lesson : 0
 
-  return achievementXP + gratitudeXP + goalNoteXP + moodEnergyXP + lessonXP
+  return achievementXP + gratitudeXP + goalNoteXP + lessonXP - badActionXP
 }
 
 
@@ -252,8 +260,10 @@ function App() {
   const [achievementInput, setAchievementInput] = useState('')
   const [gratitudeInput, setGratitudeInput] = useState('')
   const [goalNoteInput, setGoalNoteInput] = useState('')
+  const [badActionInput, setBadActionInput] = useState('')
   const [planTaskInput, setPlanTaskInput] = useState('')
   const [planCategoryInput, setPlanCategoryInput] = useState('Other')
+  const [newCategoryInput, setNewCategoryInput] = useState('')
   const [planXpInput, setPlanXpInput] = useState(10)
 
   const [dashboardEditingGoalId, setDashboardEditingGoalId] = useState(null)
@@ -275,6 +285,7 @@ function App() {
 
 
   const planForSelectedDate = data.dailyPlans?.[selectedDate] || []
+  const categoryOptions = (Array.isArray(data.taskCategories) && data.taskCategories.length ? data.taskCategories : DEFAULT_TASK_CATEGORIES)
 
   const addPlanTask = () => {
     if (!planTaskInput.trim()) return
@@ -282,7 +293,7 @@ function App() {
       id: safeId(),
       text: planTaskInput.trim(),
       completed: false,
-      category: PLAN_CATEGORIES.includes(planCategoryInput) ? planCategoryInput : 'Other',
+      category: categoryOptions.includes(planCategoryInput) ? planCategoryInput : 'Other',
       xp: Number(planXpInput) >= 0 ? Number(planXpInput) : 10,
       createdAt: new Date().toISOString(),
     }
@@ -303,7 +314,7 @@ function App() {
       dailyPlans: {
         ...data.dailyPlans,
         [selectedDate]: planForSelectedDate.map((task) =>
-          task.id === taskId ? { ...task, ...updates, category: PLAN_CATEGORIES.includes(updates.category ?? task.category) ? (updates.category ?? task.category) : 'Other' } : task,
+          task.id === taskId ? { ...task, ...updates, category: categoryOptions.includes(updates.category ?? task.category) ? (updates.category ?? task.category) : 'Other' } : task,
         ),
       },
     })
@@ -322,6 +333,35 @@ function App() {
         ...data.dailyPlans,
         [selectedDate]: planForSelectedDate.filter((task) => task.id !== taskId),
       },
+    })
+  }
+
+  const addTaskCategory = () => {
+    const next = (newCategoryInput || '').trim()
+    if (!next) return
+    if (categoryOptions.includes(next)) return
+    updateData({ ...data, taskCategories: [...categoryOptions, next] })
+    setNewCategoryInput('')
+  }
+
+  const renameTaskCategory = (oldName, newName) => {
+    const next = (newName || '').trim()
+    if (!next || oldName === 'Other') return
+    const updatedCats = categoryOptions.map((c) => (c === oldName ? next : c))
+    updateData({
+      ...data,
+      taskCategories: Array.from(new Set(updatedCats)),
+      dailyPlans: Object.fromEntries(Object.entries(data.dailyPlans || {}).map(([date, tasks]) => [date, (tasks || []).map((t) => ({ ...t, category: t.category === oldName ? next : t.category }))])),
+    })
+  }
+
+  const deleteTaskCategory = (name) => {
+    if (categoryOptions.length <= 1 || name === 'Other') return
+    const updatedCats = categoryOptions.filter((c) => c !== name)
+    updateData({
+      ...data,
+      taskCategories: updatedCats.includes('Other') ? updatedCats : [...updatedCats, 'Other'],
+      dailyPlans: Object.fromEntries(Object.entries(data.dailyPlans || {}).map(([date, tasks]) => [date, (tasks || []).map((t) => ({ ...t, category: t.category === name ? 'Other' : t.category }))])),
     })
   }
 
@@ -441,6 +481,7 @@ function App() {
       achievementsText: ensureArray(selected.achievements).join('\n'),
       gratitudeText: ensureArray(selected.gratitude).join('\n'),
       goalNotesText: ensureArray(selected.goalNotes).join('\n'),
+      badActionsText: ensureArray(selected.badActions).join('\n'),
     })
     setIsHistoryEditMode(false)
   }
@@ -465,8 +506,7 @@ function App() {
       achievements: toList(historyDraft.achievementsText),
       gratitude: toList(historyDraft.gratitudeText),
       goalNotes: toList(historyDraft.goalNotesText),
-      mood: Number(historyDraft.mood) || 5,
-      energy: Number(historyDraft.energy) || 5,
+      badActions: toList(historyDraft.badActionsText),
       lesson: historyDraft.lesson || '',
     }, historyDraft.date)
 
@@ -485,6 +525,7 @@ function App() {
       achievementsText: updatedEntry.achievements.join('\n'),
       gratitudeText: updatedEntry.gratitude.join('\n'),
       goalNotesText: updatedEntry.goalNotes.join('\n'),
+      badActionsText: ensureArray(updatedEntry.badActions).join('\n'),
     })
     setIsHistoryEditMode(false)
   }
@@ -623,11 +664,7 @@ function App() {
                 <EntryInput label="Achievements" value={achievementInput} setValue={setAchievementInput} onAdd={() => addListItem('achievements', achievementInput, setAchievementInput)} onRemove={(index) => removeListItem('achievements', index)} items={todayEntry.achievements} xpText="+10 XP each" />
                 <EntryInput label="Gratitude" value={gratitudeInput} setValue={setGratitudeInput} onAdd={() => addListItem('gratitude', gratitudeInput, setGratitudeInput)} onRemove={(index) => removeListItem('gratitude', index)} items={todayEntry.gratitude} xpText="+5 XP each" />
                 <EntryInput label="Goal Progress Notes" value={goalNoteInput} setValue={setGoalNoteInput} onAdd={() => addListItem('goalNotes', goalNoteInput, setGoalNoteInput)} onRemove={(index) => removeListItem('goalNotes', index)} items={todayEntry.goalNotes} xpText="+15 XP each" />
-                <div className="grid grid-cols-2 gap-4">
-                  <ScoreInput label="Mood Score" value={todayEntry.mood} onChange={(value) => updateTodayEntry({ ...todayEntry, mood: value })} />
-                  <ScoreInput label="Energy Score" value={todayEntry.energy} onChange={(value) => updateTodayEntry({ ...todayEntry, energy: value })} />
-                </div>
-                <p className="text-xs text-slate-500">Mood + Energy logging together: +5 XP</p>
+                <EntryInput label="Things I should not have done" value={badActionInput} setValue={setBadActionInput} onAdd={() => addListItem('badActions', badActionInput, setBadActionInput)} onRemove={(index) => removeListItem('badActions', index)} items={todayEntry.badActions || []} xpText="-10 XP each" />
                 <div>
                   <label className="mb-1 block font-medium">Lesson of the Day (+20 XP)</label>
                   <textarea value={todayEntry.lesson} onChange={(e) => updateTodayEntry({ ...todayEntry, lesson: e.target.value })} className="w-full rounded-lg border border-slate-300 p-2" rows={3} placeholder="What did you learn today?" />
@@ -646,11 +683,24 @@ function App() {
                   placeholder="Add a task or activity"
                 />
                 <div className="grid grid-cols-3 gap-2">
-                  <select value={planCategoryInput} onChange={(e) => setPlanCategoryInput(e.target.value)} className="rounded-lg border border-slate-300 p-2">{PLAN_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select>
+                  <select value={planCategoryInput} onChange={(e) => setPlanCategoryInput(e.target.value)} className="rounded-lg border border-slate-300 p-2">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
                   <input type="number" min="0" value={planXpInput} onChange={(e) => setPlanXpInput(e.target.value)} className="rounded-lg border border-slate-300 p-2" placeholder="XP" />
                   <button onClick={addPlanTask} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">Add task</button>
                 </div>
               </div>
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-semibold">Manage categories</p>
+                <div className="mt-2 flex gap-2">
+                  <input value={newCategoryInput} onChange={(e) => setNewCategoryInput(e.target.value)} className="w-full rounded border border-slate-300 p-1 text-sm" placeholder="New category" />
+                  <button onClick={addTaskCategory} className="rounded bg-slate-800 px-2 py-1 text-sm text-white">Add</button>
+                </div>
+                <div className="mt-2 space-y-1">
+                  {categoryOptions.map((category) => (
+                    <CategoryRow key={category} category={category} canDelete={categoryOptions.length > 1 && category !== 'Other'} onRename={renameTaskCategory} onDelete={deleteTaskCategory} />
+                  ))}
+                </div>
+              </div>
+
               <p className="mt-3 text-sm font-semibold text-slate-600">Completed plan XP: {dailyPlanCompletedXP} / {dailyPlanTotalXP} XP (included in Total XP)</p>
 
               <div className="mt-4 space-y-2">
@@ -664,7 +714,7 @@ function App() {
                         className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
                       />
                       <div className="grid grid-cols-2 gap-2">
-                        <select value={PLAN_CATEGORIES.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{PLAN_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select>
+                        <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
                         <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="rounded border border-slate-300 p-1 text-sm" />
                       </div>
                     </div>
@@ -824,6 +874,7 @@ function App() {
                       </ul>
                     </div>
                     <p className="mt-2"><span className="font-medium">Lesson preview:</span> {safeText(data.entries[historyDate].lesson)}</p>
+                    <p className="mt-1 text-xs text-rose-600">Bad actions: {(ensureArray(data.entries[historyDate].badActions).length ? ensureArray(data.entries[historyDate].badActions).slice(0, 2).join(', ') : 'Not provided')}</p>
                     <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-indigo-600">View details →</p>
                   </button>
                 ) : <p className="text-slate-500">No saved entry for this date.</p>}
@@ -910,7 +961,7 @@ function App() {
                   ) : (
                     <div className="flex gap-2">
                       <button type="button" onClick={saveHistoryEdit} className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white">Save</button>
-                      <button type="button" onClick={() => { setIsHistoryEditMode(false); setHistoryDraft({ ...selectedHistoryEntry, achievementsText: ensureArray(selectedHistoryEntry.achievements).join('\n'), gratitudeText: ensureArray(selectedHistoryEntry.gratitude).join('\n'), goalNotesText: ensureArray(selectedHistoryEntry.goalNotes).join('\n') }) }} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Cancel</button>
+                      <button type="button" onClick={() => { setIsHistoryEditMode(false); setHistoryDraft({ ...selectedHistoryEntry, achievementsText: ensureArray(selectedHistoryEntry.achievements).join('\n'), gratitudeText: ensureArray(selectedHistoryEntry.gratitude).join('\n'), goalNotesText: ensureArray(selectedHistoryEntry.goalNotes).join('\n'), badActionsText: ensureArray(selectedHistoryEntry.badActions).join('\n') }) }} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Cancel</button>
                     </div>
                   )}
                 </div>
@@ -924,19 +975,13 @@ function App() {
                     </div>
                     <FormTextArea label="Gratitude" value={historyDraft?.gratitudeText || ''} onChange={(value) => setHistoryDraft({ ...historyDraft, gratitudeText: value })} />
                     <FormTextArea label="Goal Notes" value={historyDraft?.goalNotesText || ''} onChange={(value) => setHistoryDraft({ ...historyDraft, goalNotesText: value })} />
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormInput label="Mood" type="number" value={historyDraft?.mood ?? ''} onChange={(value) => setHistoryDraft({ ...historyDraft, mood: value })} />
-                      <FormInput label="Energy" type="number" value={historyDraft?.energy ?? ''} onChange={(value) => setHistoryDraft({ ...historyDraft, energy: value })} />
-                    </div>
+                    <FormTextArea label="Things I should not have done" value={historyDraft?.badActionsText || ''} onChange={(value) => setHistoryDraft({ ...historyDraft, badActionsText: value })} />
                     <FormTextArea label="Lesson" value={historyDraft?.lesson || ''} onChange={(value) => setHistoryDraft({ ...historyDraft, lesson: value })} />
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <ScoreCard title="Mood" value={safeScore(selectedHistoryEntry.mood)} />
-                      <ScoreCard title="Energy" value={safeScore(selectedHistoryEntry.energy)} />
-                    </div>
                     <BulletSection title="Achievements" items={achievementBullets(selectedHistoryEntry)} />
+                    <BulletSection title="Things I should not have done" items={ensureArray(selectedHistoryEntry.badActions)} />
                     <ModalSection title="Gratitude" value={ensureArray(selectedHistoryEntry.gratitude)} />
                     <ModalSection title="Goal Notes" value={ensureArray(selectedHistoryEntry.goalNotes)} />
                     <ModalSection title="Lesson" value={safeText(selectedHistoryEntry.lesson)} />
@@ -1038,6 +1083,27 @@ function RewardGroup({ title, rewards, level, onEdit, onClaim, onDelete, claimed
         })}
         {rewards.length === 0 && <p className="text-slate-500">No rewards in this group.</p>}
       </div>
+    </div>
+  )
+}
+
+
+function CategoryRow({ category, canDelete, onRename, onDelete }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <input
+        value={category}
+        onChange={(e) => onRename(category, e.target.value)}
+        disabled={category === 'Other'}
+        className="w-full rounded border border-slate-300 p-1 disabled:bg-slate-100"
+      />
+      <button
+        onClick={() => onDelete(category)}
+        disabled={!canDelete}
+        className="rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50"
+      >
+        Delete
+      </button>
     </div>
   )
 }
