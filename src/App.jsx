@@ -20,8 +20,44 @@ const defaultState = {
   dailyPlans: {},
   rewards: [],
   taskCategories: DEFAULT_TASK_CATEGORIES,
+  entryBlocks: getDefaultEntryBlocks(),
 }
 
+
+
+function getDefaultEntryBlocks() {
+  return [
+    { id: 'achievements', title: 'Achievements', type: 'list', xpValue: 10, isPenalty: false, createdAt: new Date().toISOString() },
+    { id: 'gratitude', title: 'Gratitude', type: 'list', xpValue: 5, isPenalty: false, createdAt: new Date().toISOString() },
+    { id: 'goalNotes', title: 'Goal Progress Notes', type: 'list', xpValue: 15, isPenalty: false, createdAt: new Date().toISOString() },
+    { id: 'badActions', title: 'Things I should not have done', type: 'list', xpValue: 10, isPenalty: true, createdAt: new Date().toISOString() },
+    { id: 'lesson', title: 'Lesson of the Day', type: 'text', xpValue: 20, isPenalty: false, createdAt: new Date().toISOString() },
+  ]
+}
+
+function normalizeEntryBlocks(rawBlocks) {
+  const fallback = getDefaultEntryBlocks()
+  if (!Array.isArray(rawBlocks) || !rawBlocks.length) return fallback
+
+  const normalized = rawBlocks
+    .map((block) => {
+      if (!block || typeof block !== 'object') return null
+      const type = block.type === 'text' ? 'text' : 'list'
+      const title = typeof block.title === 'string' && block.title.trim() ? block.title.trim() : null
+      if (!title) return null
+      return {
+        id: typeof block.id === 'string' && block.id.trim() ? block.id : safeId(),
+        title,
+        type,
+        xpValue: Number(block.xpValue) >= 0 ? Number(block.xpValue) : 0,
+        isPenalty: Boolean(block.isPenalty),
+        createdAt: block.createdAt || new Date().toISOString(),
+      }
+    })
+    .filter(Boolean)
+
+  return normalized.length ? normalized : fallback
+}
 
 function createEmptyEntry(date) {
   return {
@@ -34,11 +70,25 @@ function createEmptyEntry(date) {
     energy: 5,
     lesson: '',
     xpEarned: 0,
+    blockValues: {},
   }
 }
 
-function normalizeEntry(rawEntry, date) {
+function normalizeEntry(rawEntry, date, entryBlocks = getDefaultEntryBlocks()) {
   const entry = rawEntry && typeof rawEntry === 'object' ? rawEntry : {}
+  const blockValues = {}
+  const safeList = (value) => (Array.isArray(value) ? value : [])
+  const safeString = (value) => (typeof value === 'string' ? value : '')
+
+  entryBlocks.forEach((block) => {
+    if (block.id === 'achievements') blockValues[block.id] = safeList(entry.achievements)
+    else if (block.id === 'gratitude') blockValues[block.id] = safeList(entry.gratitude)
+    else if (block.id === 'goalNotes') blockValues[block.id] = safeList(entry.goalNotes)
+    else if (block.id === 'badActions') blockValues[block.id] = safeList(entry.badActions)
+    else if (block.id === 'lesson') blockValues[block.id] = safeString(entry.lesson)
+    else blockValues[block.id] = block.type === 'text' ? safeString(entry?.blockValues?.[block.id]) : safeList(entry?.blockValues?.[block.id])
+  })
+
   const normalized = {
     date,
     achievements: Array.isArray(entry.achievements) ? entry.achievements : [],
@@ -49,6 +99,7 @@ function normalizeEntry(rawEntry, date) {
     energy: Number(entry.energy) || 5,
     lesson: typeof entry.lesson === 'string' ? entry.lesson : '',
     xpEarned: Number(entry.xpEarned) || 0,
+    blockValues,
   }
   normalized.xpEarned = calculateEntryXP(normalized)
   return normalized
@@ -146,8 +197,10 @@ function loadData() {
       ? parsed.goals.map(normalizeGoal).filter(Boolean)
       : []
 
+    const normalizedEntryBlocks = normalizeEntryBlocks(parsed.entryBlocks)
+
     const rawEntries = parsed.entries && typeof parsed.entries === 'object' ? parsed.entries : {}
-    const normalizedEntries = Object.fromEntries(Object.entries(rawEntries).map(([date, entry]) => [date, normalizeEntry(entry, date)]))
+    const normalizedEntries = Object.fromEntries(Object.entries(rawEntries).map(([date, entry]) => [date, normalizeEntry(entry, date, normalizedEntryBlocks)]))
 
     const rawPlans = parsed.dailyPlans && typeof parsed.dailyPlans === 'object' ? parsed.dailyPlans : {}
     const normalizedPlans = Object.fromEntries(
@@ -182,6 +235,7 @@ function loadData() {
       dailyPlans: normalizedPlans,
       rewards: normalizedRewards,
       taskCategories: finalTaskCategories,
+      entryBlocks: normalizedEntryBlocks,
     }
   } catch {
     return defaultState
