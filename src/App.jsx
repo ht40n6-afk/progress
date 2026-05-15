@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 const STORAGE_KEY = 'life-gamification-tracker-v1'
 
 const DEFAULT_TASK_CATEGORIES = ['Work', 'Health', 'Personal', 'Learning', 'Admin', 'Other']
+const TIME_BLOCKS = ['Anytime', '06:00 to 08:00', '08:00 to 10:00', '10:00 to 12:00', '12:00 to 14:00', '14:00 to 16:00', '16:00 to 18:00', '18:00 to 20:00', '20:00 to 22:00', '22:00 to 00:00']
 
 const XP_RULES = {
   achievement: 10,
@@ -147,6 +148,7 @@ function loadData() {
               completed: Boolean(task?.completed),
               category: task?.category && typeof task.category === 'string' ? task.category : 'Other',
               xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
+              timeBlock: TIME_BLOCKS.includes(task?.timeBlock) ? task.timeBlock : 'Anytime',
               createdAt: task?.createdAt || new Date().toISOString(),
             })).filter((task) => task.text.trim())
           : [],
@@ -267,6 +269,7 @@ function App() {
   const [showCompletedTasks, setShowCompletedTasks] = useState(false)
   const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [planXpInput, setPlanXpInput] = useState(10)
+  const [planTimeBlockInput, setPlanTimeBlockInput] = useState('Anytime')
 
   const [dashboardEditingGoalId, setDashboardEditingGoalId] = useState(null)
 
@@ -287,7 +290,14 @@ function App() {
 
 
   const planForSelectedDate = data.dailyPlans?.[selectedDate] || []
-  const activePlanTasks = planForSelectedDate.filter((task) => !task.completed)
+  const activePlanTasks = planForSelectedDate
+    .filter((task) => !task.completed)
+    .slice()
+    .sort((a, b) => {
+      const ai = TIME_BLOCKS.includes(a.timeBlock) ? TIME_BLOCKS.indexOf(a.timeBlock) : 0
+      const bi = TIME_BLOCKS.includes(b.timeBlock) ? TIME_BLOCKS.indexOf(b.timeBlock) : 0
+      return ai - bi
+    })
   const completedPlanTasks = planForSelectedDate.filter((task) => task.completed)
   const categoryOptions = (Array.isArray(data.taskCategories) && data.taskCategories.length ? data.taskCategories : DEFAULT_TASK_CATEGORIES)
 
@@ -299,6 +309,7 @@ function App() {
       completed: false,
       category: categoryOptions.includes(planCategoryInput) ? planCategoryInput : 'Other',
       xp: Number(planXpInput) >= 0 ? Number(planXpInput) : 10,
+      timeBlock: TIME_BLOCKS.includes(planTimeBlockInput) ? planTimeBlockInput : 'Anytime',
       createdAt: new Date().toISOString(),
     }
     updateData({
@@ -310,6 +321,7 @@ function App() {
     })
     setPlanTaskInput('')
     setPlanXpInput(10)
+    setPlanTimeBlockInput('Anytime')
   }
 
   const updatePlanTask = (taskId, updates) => {
@@ -318,7 +330,7 @@ function App() {
       dailyPlans: {
         ...data.dailyPlans,
         [selectedDate]: planForSelectedDate.map((task) =>
-          task.id === taskId ? { ...task, ...updates, category: categoryOptions.includes(updates.category ?? task.category) ? (updates.category ?? task.category) : 'Other' } : task,
+          task.id === taskId ? { ...task, ...updates, category: categoryOptions.includes(updates.category ?? task.category) ? (updates.category ?? task.category) : 'Other', timeBlock: TIME_BLOCKS.includes(updates.timeBlock ?? task.timeBlock) ? (updates.timeBlock ?? task.timeBlock) : 'Anytime' } : task,
         ),
       },
     })
@@ -686,9 +698,10 @@ function App() {
                   className="w-full rounded-lg border border-slate-300 p-2"
                   placeholder="Add a task or activity"
                 />
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid gap-2 sm:grid-cols-[1fr_1.2fr_90px_auto]">
                   <select value={planCategoryInput} onChange={(e) => setPlanCategoryInput(e.target.value)} className="rounded-lg border border-slate-300 p-2">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
-                  <input type="number" min="0" value={planXpInput} onChange={(e) => setPlanXpInput(e.target.value)} className="rounded-lg border border-slate-300 p-2" placeholder="XP" />
+                  <select value={planTimeBlockInput} onChange={(e) => setPlanTimeBlockInput(e.target.value)} className="rounded-lg border border-slate-300 p-2">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
+                  <input type="number" min="0" value={planXpInput} onChange={(e) => setPlanXpInput(e.target.value)} className="w-[90px] rounded-lg border border-slate-300 p-2" placeholder="XP" />
                   <button onClick={addPlanTask} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">Add task</button>
                 </div>
               </div>
@@ -728,9 +741,10 @@ function App() {
                         onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
                         className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
                       />
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
                         <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
-                        <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="rounded border border-slate-300 p-1 text-sm" />
+                        <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
+                        <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[90px] rounded border border-slate-300 p-1 text-sm" />
                       </div>
                     </div>
                     <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
@@ -761,9 +775,10 @@ function App() {
                             onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
                             className="w-full rounded border border-slate-300 p-1 line-through"
                           />
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
                             <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
-                            <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="rounded border border-slate-300 p-1 text-sm" />
+                            <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
+                            <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[90px] rounded border border-slate-300 p-1 text-sm" />
                           </div>
                         </div>
                         <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
