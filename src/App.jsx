@@ -264,6 +264,7 @@ function App() {
   const [planTaskInput, setPlanTaskInput] = useState('')
   const [planCategoryInput, setPlanCategoryInput] = useState('Other')
   const [newCategoryInput, setNewCategoryInput] = useState('')
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false)
   const [planXpInput, setPlanXpInput] = useState(10)
 
   const [dashboardEditingGoalId, setDashboardEditingGoalId] = useState(null)
@@ -285,6 +286,8 @@ function App() {
 
 
   const planForSelectedDate = data.dailyPlans?.[selectedDate] || []
+  const activePlanTasks = planForSelectedDate.filter((task) => !task.completed)
+  const completedPlanTasks = planForSelectedDate.filter((task) => task.completed)
   const categoryOptions = (Array.isArray(data.taskCategories) && data.taskCategories.length ? data.taskCategories : DEFAULT_TASK_CATEGORIES)
 
   const addPlanTask = () => {
@@ -704,7 +707,7 @@ function App() {
               <p className="mt-3 text-sm font-semibold text-slate-600">Completed plan XP: {dailyPlanCompletedXP} / {dailyPlanTotalXP} XP (included in Total XP)</p>
 
               <div className="mt-4 space-y-2">
-                {planForSelectedDate.map((task) => (
+                {activePlanTasks.map((task) => (
                   <div key={task.id} className={`flex items-center gap-2 rounded-lg border border-slate-200 p-2 ${task.completed ? 'opacity-60' : ''}`}>
                     <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
                     <div className="w-full space-y-1">
@@ -722,7 +725,42 @@ function App() {
                     <button onClick={() => deletePlanTask(task.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                   </div>
                 ))}
-                {planForSelectedDate.length === 0 && <p className="text-sm text-slate-500">No tasks planned yet.</p>}
+                {activePlanTasks.length === 0 && <p className="text-sm text-slate-500">No tasks planned yet.</p>}
+              </div>
+
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCompletedTasks((value) => !value)}
+                  className="flex w-full items-center justify-between text-left text-sm font-semibold"
+                >
+                  <span>Completed tasks ({completedPlanTasks.length})</span>
+                  <span>{showCompletedTasks ? '▾' : '▸'}</span>
+                </button>
+
+                {showCompletedTasks && (
+                  <div className="mt-3 space-y-2">
+                    {completedPlanTasks.map((task) => (
+                      <div key={task.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 opacity-80">
+                        <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
+                        <div className="w-full space-y-1">
+                          <input
+                            value={task.text}
+                            onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
+                            className="w-full rounded border border-slate-300 p-1 line-through"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
+                            <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="rounded border border-slate-300 p-1 text-sm" />
+                          </div>
+                        </div>
+                        <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
+                        <button onClick={() => deletePlanTask(task.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                      </div>
+                    ))}
+                    {completedPlanTasks.length === 0 && <p className="text-sm text-slate-500">No completed tasks yet.</p>}
+                  </div>
+                )}
               </div>
             </section>
 
