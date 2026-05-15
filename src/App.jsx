@@ -734,14 +734,14 @@ function App() {
                   onClick={() => setShowCompletedTasks((value) => !value)}
                   className="flex w-full items-center justify-between text-left text-sm font-semibold"
                 >
-                  <span>Completed tasks ({completedPlanTasks.length})</span>
-                  <span>{showCompletedTasks ? '▾' : '▸'}</span>
+                  <span>Completed tasks ({completedPlanTasks.length}) · {dailyPlanCompletedXP} XP</span>
+                  <span aria-hidden="true" className="text-slate-500">{showCompletedTasks ? '⌄' : '›'}</span>
                 </button>
 
                 {showCompletedTasks && (
                   <div className="mt-3 space-y-2">
                     {completedPlanTasks.map((task) => (
-                      <div key={task.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 opacity-80">
+                      <div key={task.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 opacity-70">
                         <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
                         <div className="w-full space-y-1">
                           <input
