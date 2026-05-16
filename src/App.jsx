@@ -925,16 +925,16 @@ function App() {
     return () => window.removeEventListener("keydown", handleEsc)
   }, [selectedHistoryEntry])
 
-  return (    <div className="min-h-screen bg-slate-50 p-6 text-slate-800">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="rounded-2xl bg-white p-6 shadow-sm">
+  return (    <div className="min-h-screen bg-slate-50 p-3 sm:p-4 lg:p-6 text-slate-800">
+      <div className="mx-auto max-w-6xl space-y-4 lg:space-y-6 overflow-x-hidden">
+        <header className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
           <h1 className="text-3xl font-bold">Personal Life Gamification Tracker</h1>
           <p className="mt-2 text-slate-600">Track your habits, reflections, and progress one day at a time.</p>
           <div className="mt-4 flex flex-wrap gap-4 text-sm">
             <span className="rounded-full bg-indigo-100 px-4 py-2 font-semibold text-indigo-700">Total XP: {totalXP}</span>
             <span className="rounded-full bg-emerald-100 px-4 py-2 font-semibold text-emerald-700">Level: {level}</span>
           </div>
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               onClick={() => setActivePage('dashboard')}
               className={`rounded-lg px-4 py-2 font-semibold ${activePage === 'dashboard' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`}
@@ -951,9 +951,9 @@ function App() {
         </header>
 
         {activePage === 'dashboard' && (
-          <div className="grid gap-6 lg:grid-cols-2">
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">1. Today Entry ({selectedDate})</h2><input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="rounded-lg border border-slate-300 p-2 text-sm" /></div>
+          <div className="grid grid-cols-1 gap-4 lg:gap-6 xl:grid-cols-2">
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">1. Today Entry ({selectedDate})</h2><input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full sm:w-auto rounded-lg border border-slate-300 p-2 text-sm" /></div>
               <div className="mt-4 space-y-4">
                 {data.entryBlocks.map((block) => {
                   const value = getEntryBlockValue(todayEntry, block)
@@ -997,7 +997,7 @@ function App() {
 
                 {showEntryBlockManager && (
                   <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <div className="grid gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
                       <input value={newBlockTitle} onChange={(e) => setNewBlockTitle(e.target.value)} className="rounded border border-slate-300 p-1.5" placeholder="Block title" />
                       <select value={newBlockType} onChange={(e) => setNewBlockType(e.target.value)} className="rounded border border-slate-300 p-1.5"><option value="list">list</option><option value="text">text</option></select>
                       <input type="number" min="0" value={newBlockXpValue} onChange={(e) => setNewBlockXpValue(e.target.value)} className="rounded border border-slate-300 p-1.5" placeholder="XP" />
@@ -1007,7 +1007,7 @@ function App() {
 
                     <div className="mt-2 space-y-1">
                       {(data.entryBlocks || []).map((block) => (
-                        <div key={block.id} className="grid gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
+                        <div key={block.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
                           <input value={block.title} onChange={(e) => updateEntryBlockConfig(block.id, { title: e.target.value })} className="rounded border border-slate-300 p-1.5" />
                           <select value={block.type} onChange={(e) => updateEntryBlockConfig(block.id, { type: e.target.value })} className="rounded border border-slate-300 p-1.5"><option value="list">list</option><option value="text">text</option></select>
                           <input type="number" min="0" value={block.xpValue} onChange={(e) => updateEntryBlockConfig(block.id, { xpValue: e.target.value })} className="rounded border border-slate-300 p-1.5" />
@@ -1021,7 +1021,7 @@ function App() {
               </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Daily Plan</h2>
               <p className="mt-1 text-sm text-slate-600">Plan tasks and intentions for {selectedDate}.</p>
               <div className="mt-3 space-y-2">
@@ -1031,10 +1031,10 @@ function App() {
                   className="w-full rounded-lg border border-slate-300 p-2"
                   placeholder="Add a task or activity"
                 />
-                <div className="grid gap-2 sm:grid-cols-[1fr_1.2fr_90px_auto]">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px_auto]">
                   <select value={planCategoryInput} onChange={(e) => setPlanCategoryInput(e.target.value)} className="rounded-lg border border-slate-300 p-2">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
                   <select value={planTimeBlockInput} onChange={(e) => setPlanTimeBlockInput(e.target.value)} className="rounded-lg border border-slate-300 p-2">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
-                  <input type="number" min="0" value={planXpInput} onChange={(e) => setPlanXpInput(e.target.value)} className="w-[90px] rounded-lg border border-slate-300 p-2" placeholder="XP" />
+                  <input type="number" min="0" value={planXpInput} onChange={(e) => setPlanXpInput(e.target.value)} className="w-[80px] sm:w-[90px] rounded-lg border border-slate-300 p-2" placeholder="XP" />
                   <button onClick={addPlanTask} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">Add task</button>
                 </div>
               </div>
@@ -1066,22 +1066,22 @@ function App() {
 
               <div className="mt-4 space-y-2">
                 {activePlanTasks.map((task) => (
-                  <div key={task.id} className={`flex items-center gap-2 rounded-lg border border-slate-200 p-2 ${task.completed ? 'opacity-60' : ''}`}>
+                  <div key={task.id} className={`flex flex-col items-stretch gap-2 rounded-lg border border-slate-200 p-2 sm:flex-row sm:items-center ${task.completed ? 'opacity-60' : ''}`}>
                     <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
-                    <div className="w-full space-y-1">
+                    <div className="w-full min-w-0 space-y-1">
                       <input
                         value={task.text}
                         onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
                         className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
                       />
-                      <div className="grid gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
                         <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
                         <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
-                        <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[90px] rounded border border-slate-300 p-1 text-sm" />
+                        <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[80px] sm:w-[90px] rounded border border-slate-300 p-1 text-sm" />
                       </div>
                     </div>
                     <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
-                    <button onClick={() => deletePlanTask(task.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                    <button onClick={() => deletePlanTask(task.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                   </div>
                 ))}
                 {activePlanTasks.length === 0 && <p className="text-sm text-slate-500">No tasks planned yet.</p>}
@@ -1091,7 +1091,7 @@ function App() {
                 <button
                   type="button"
                   onClick={() => setShowCompletedTasks((value) => !value)}
-                  className="flex w-full items-center justify-between text-left text-sm font-semibold"
+                  className="flex w-full flex-wrap items-center justify-between gap-2 text-left text-sm font-semibold"
                 >
                   <span>Completed tasks ({completedPlanTasks.length}) · {dailyPlanCompletedXP} XP</span>
                   <span aria-hidden="true" className="text-slate-500">{showCompletedTasks ? '⌄' : '›'}</span>
@@ -1102,20 +1102,20 @@ function App() {
                     {completedPlanTasks.map((task) => (
                       <div key={task.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 opacity-70">
                         <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
-                        <div className="w-full space-y-1">
+                        <div className="w-full min-w-0 space-y-1">
                           <input
                             value={task.text}
                             onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
                             className="w-full rounded border border-slate-300 p-1 line-through"
                           />
-                          <div className="grid gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
                             <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
                             <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
-                            <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[90px] rounded border border-slate-300 p-1 text-sm" />
+                            <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[80px] sm:w-[90px] rounded border border-slate-300 p-1 text-sm" />
                           </div>
                         </div>
                         <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
-                        <button onClick={() => deletePlanTask(task.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                        <button onClick={() => deletePlanTask(task.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                       </div>
                     ))}
                     {completedPlanTasks.length === 0 && <p className="text-sm text-slate-500">No completed tasks yet.</p>}
@@ -1124,14 +1124,14 @@ function App() {
               </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">2. Goals</h2>
               <p className="mt-2 text-sm text-slate-600">Create, edit, and update goals directly from your dashboard.</p>
 
               <div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4">
                 <h3 className="font-semibold">{isEditingGoal ? 'Edit Goal' : 'Create Goal'}</h3>
                 <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Name" value={goalDraft.name} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.currentProgress} onChange={(e) => setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) })} />
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.targetProgress} onChange={(e) => setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) })} />
                 </div>
@@ -1141,7 +1141,7 @@ function App() {
                   <option>Completed</option>
                   <option>Paused</option>
                 </select>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button onClick={saveGoal} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{isEditingGoal ? 'Save Changes' : 'Add Goal'}</button>
                   {isEditingGoal && <button onClick={() => { setGoalDraft(createEmptyGoal()); setIsEditingGoal(false) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
                 </div>
@@ -1162,7 +1162,7 @@ function App() {
                           )}
                           <p className="text-slate-600">{goal.currentProgress}/{goal.targetProgress} • {goal.status}</p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           {isEditing ? (
                             <button onClick={() => { saveGoal(); setDashboardEditingGoalId(null) }} className="rounded bg-indigo-600 px-2 py-1 text-white">Save</button>
                           ) : (
@@ -1173,7 +1173,7 @@ function App() {
                           ) : (
                             <button disabled className="rounded bg-emerald-50 px-2 py-1 text-emerald-400">Completed</button>
                           )}
-                          <button onClick={() => deleteGoal(goal.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                          <button onClick={() => deleteGoal(goal.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                         </div>
                       </div>
                       <ProgressBar percent={percent} />
@@ -1190,7 +1190,7 @@ function App() {
                 {activeGoals.length === 0 && <p className="text-slate-500">No active goals. Complete archive below.</p>}              </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Completed Goals Archive</h2>
               <div className="mt-4 space-y-3">
                 {completedGoals.map((goal) => (
@@ -1198,9 +1198,9 @@ function App() {
                     <p className="font-semibold">{goal.name}</p>
                     <p className="text-slate-600">{goal.currentProgress}/{goal.targetProgress} • {goal.status}</p>
                     <p className="text-slate-500">Completed: {goal.completedAt || 'Unknown'}</p>
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex flex-wrap gap-2">
                       <button onClick={() => restoreGoal(goal.id)} className="rounded bg-slate-200 px-2 py-1">Restore</button>
-                      <button onClick={() => deleteGoal(goal.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                      <button onClick={() => deleteGoal(goal.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                     </div>
                   </div>
                 ))}
@@ -1208,7 +1208,7 @@ function App() {
               </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">3. Progress Dashboard</h2>
               <div className="mt-4 grid gap-3 text-sm">
                 <DashboardCard title="Total XP" value={`${totalXP} XP`} />
@@ -1224,13 +1224,13 @@ function App() {
               </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Rewards</h2>
               <p className="mt-1 text-sm text-slate-600">Current Level: {level} · Rewards unlocked: {unlockedRewardsCount} / {(data.rewards || []).length}</p>
               <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-4">
                 <input value={rewardTitleInput} onChange={(e) => setRewardTitleInput(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" placeholder="Reward title" />
                 <textarea value={rewardDescriptionInput} onChange={(e) => setRewardDescriptionInput(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" rows={2} placeholder="Reward description" />
-                <div className="grid gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <select value={rewardUnlockType} onChange={(e) => setRewardUnlockType(e.target.value)} className="rounded-lg border border-slate-300 p-2">
                     <option value="level">By level</option>
                     <option value="task">By task completion</option>
@@ -1243,7 +1243,7 @@ function App() {
                       {rewardTaskOptions.map((task) => <option key={`${task.id}|${task.date}`} value={`${task.id}|${task.date}`}>{task.text} ({task.date})</option>)}
                     </select>
                   )}
-                  <input type="file" accept="image/*" onChange={handleRewardImageChange} className="rounded-lg border border-slate-300 p-2 text-sm" />
+                  <input type="file" accept="image/*" onChange={handleRewardImageChange} className="w-full sm:w-auto rounded-lg border border-slate-300 p-2 text-sm" />
                   <button onClick={addOrUpdateReward} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{editingRewardId ? 'Save reward' : 'Add reward'}</button>
                 </div>
                 {rewardUnlockType === 'task' && rewardTaskOptions.length === 0 && <p className="text-xs text-slate-500">Create a Daily Plan task first.</p>}
@@ -1261,10 +1261,10 @@ function App() {
               <RewardGroup title="Claimed" rewards={claimedRewards} level={level} data={data} getRewardStatus={getRewardStatus} isRewardUnlocked={isRewardUnlocked} findTaskByIdAndDate={findTaskByIdAndDate} onEdit={startEditReward} onClaim={claimReward} onDelete={deleteReward} claimed />
             </section>
 
-            <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">4. History</h2>
-              <div className="mt-3 flex gap-2">
-                <input type="date" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} className="rounded-lg border border-slate-300 p-2 text-sm" />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input type="date" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} className="w-full sm:w-auto rounded-lg border border-slate-300 p-2 text-sm" />
               </div>
               <div className="mt-4 rounded-lg border border-slate-200 p-3 text-sm">
                 {data.entries[historyDate] ? (
@@ -1293,17 +1293,17 @@ function App() {
         )}
 
         {activePage === 'goals' && (
-          <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
             <h2 className="text-2xl font-semibold">Goals Page</h2>
             <p className="mt-1 text-sm text-slate-600">Create, edit, and delete goals. Data is saved in localStorage.</p>
 
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="mt-6 grid grid-cols-1 gap-4 lg:gap-6 xl:grid-cols-2">
               <div className="space-y-3 rounded-xl bg-slate-50 p-4">
                 <h3 className="font-semibold">{isEditingGoal ? 'Edit Goal' : 'Create Goal'}</h3>
                 <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Name" value={goalDraft.name} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} />
                 <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Category" value={goalDraft.category} onChange={(e) => setGoalDraft({ ...goalDraft, category: e.target.value })} />
                 <textarea className="w-full rounded-lg border border-slate-300 p-2" rows={3} placeholder="Description" value={goalDraft.description} onChange={(e) => setGoalDraft({ ...goalDraft, description: e.target.value })} />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.currentProgress} onChange={(e) => setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) })} />
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.targetProgress} onChange={(e) => setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) })} />
                 </div>
@@ -1313,7 +1313,7 @@ function App() {
                   <option>Completed</option>
                   <option>Paused</option>
                 </select>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button onClick={saveGoal} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{isEditingGoal ? 'Save Changes' : 'Add Goal'}</button>
                   {isEditingGoal && <button onClick={() => { setGoalDraft(createEmptyGoal()); setIsEditingGoal(false) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
                 </div>
@@ -1329,9 +1329,9 @@ function App() {
                           <h4 className="font-semibold">{goal.name}</h4>
                           <p className="text-sm text-slate-600">{goal.category} • {goal.status}</p>
                         </div>
-                        <div className="flex gap-2 text-sm">
+                        <div className="flex flex-wrap gap-2 text-sm">
                           <button onClick={() => editGoal(goal)} className="rounded bg-slate-100 px-2 py-1">Edit</button>
-                          <button onClick={() => deleteGoal(goal.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                          <button onClick={() => deleteGoal(goal.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                         </div>
                       </div>
                       <p className="mt-2 text-sm text-slate-700">{goal.description || 'No description added yet.'}</p>
@@ -1349,8 +1349,8 @@ function App() {
         )}
 
         {selectedHistoryEntry && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={closeHistoryModal}>
-            <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4" onClick={closeHistoryModal}>
+            <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
                 <div>
                   <h3 className="text-xl font-semibold">Daily History Details</h3>
@@ -1359,8 +1359,8 @@ function App() {
                 <button type="button" onClick={closeHistoryModal} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Close</button>
               </div>
 
-              <div className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-4">
-                <div className="flex items-center justify-between">
+              <div className="max-h-[80vh] sm:max-h-[75vh] space-y-4 overflow-y-auto px-6 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">XP Earned</p>
                     <p className="text-xl font-bold text-indigo-700">{calculateDayXP(selectedHistoryEntry.date, data).totalXP}</p>
@@ -1373,7 +1373,7 @@ function App() {
                   {!isHistoryEditMode ? (
                     <button type="button" onClick={() => setIsHistoryEditMode(true)} className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white">Edit</button>
                   ) : (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={saveHistoryEdit} className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white">Save</button>
                       <button type="button" onClick={() => { setIsHistoryEditMode(false); setHistoryDraft({ ...selectedHistoryEntry, blockDraftValues: Object.fromEntries((data.entryBlocks || []).map((block) => [block.id, block.type === 'list' ? getHistoryBlockValue(selectedHistoryEntry, block).join('\n') : getHistoryBlockValue(selectedHistoryEntry, block)])) }) }} className="rounded-md bg-slate-100 px-3 py-1 text-sm">Cancel</button>
                     </div>
@@ -1426,7 +1426,7 @@ function DynamicListBlock({ title, xpText, items, onAdd, onRemove }) {
   return (
     <div>
       <label className="mb-1 block font-medium">{title} ({xpText})</label>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -1437,7 +1437,7 @@ function DynamicListBlock({ title, xpText, items, onAdd, onRemove }) {
       </div>
       <ul className="mt-2 space-y-1 pl-1 text-sm">
         {items.map((item, index) => (
-          <li key={index} className="flex items-center justify-between rounded bg-slate-100 px-2 py-1">
+          <li key={index} className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-100 px-2 py-1">
             <span>{item}</span>
             <button onClick={() => onRemove(index)} className="rounded bg-rose-100 px-2 py-0.5 text-rose-700">X</button>
           </li>
@@ -1447,9 +1447,9 @@ function DynamicListBlock({ title, xpText, items, onAdd, onRemove }) {
   )
 }
 
-function EntryInput({ label, value, setValue, onAdd, onRemove, items, xpText }) { return <div><label className="mb-1 block font-medium">{label} ({xpText})</label><div className="flex gap-2"><input value={value} onChange={(e) => setValue(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" placeholder={`Add ${label.toLowerCase()}`} /><button onClick={onAdd} className="rounded-lg bg-slate-800 px-3 py-2 text-white">Add</button></div><ul className="mt-2 space-y-1 pl-1 text-sm">{items.map((item, index) => <li key={index} className="flex items-center justify-between rounded bg-slate-100 px-2 py-1"><span>{item}</span><button onClick={() => onRemove(index)} className="rounded bg-rose-100 px-2 py-0.5 text-rose-700">X</button></li>)}</ul></div> }
+function EntryInput({ label, value, setValue, onAdd, onRemove, items, xpText }) { return <div><label className="mb-1 block font-medium">{label} ({xpText})</label><div className="flex flex-wrap gap-2"><input value={value} onChange={(e) => setValue(e.target.value)} className="w-full rounded-lg border border-slate-300 p-2" placeholder={`Add ${label.toLowerCase()}`} /><button onClick={onAdd} className="rounded-lg bg-slate-800 px-3 py-2 text-white">Add</button></div><ul className="mt-2 space-y-1 pl-1 text-sm">{items.map((item, index) => <li key={index} className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-100 px-2 py-1"><span>{item}</span><button onClick={() => onRemove(index)} className="rounded bg-rose-100 px-2 py-0.5 text-rose-700">X</button></li>)}</ul></div> }
 function ScoreInput({ label, value, onChange }) { return <div><label className="mb-1 block font-medium">{label} (1-10)</label><input type="range" min="1" max="10" value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full" /><p className="text-center text-sm">{value}</p></div> }
-function Stat({ label, value }) { return <div className="flex items-center justify-between rounded-lg bg-slate-100 px-3 py-2"><span>{label}</span><span className="font-semibold">{value}</span></div> }
+function Stat({ label, value }) { return <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-100 px-3 py-2"><span>{label}</span><span className="font-semibold">{value}</span></div> }
 function DashboardCard({ title, value, children }) { return <div className="rounded-lg bg-slate-100 p-3"><p className="text-slate-600">{title}</p><p className="font-semibold">{value}</p>{children}</div> }
 function ProgressBar({ percent }) { return <div className="mt-2 h-2 w-full rounded-full bg-slate-200"><div className="h-2 rounded-full bg-indigo-500" style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div> }
 function sumCount(entries, field) { return Object.values(entries).reduce((sum, entry) => sum + entry[field].length, 0) }
@@ -1512,7 +1512,7 @@ function RewardGroup({ title, rewards, level, data, getRewardStatus, isRewardUnl
           const linkedTask = reward.unlockType === 'task' ? findTaskByIdAndDate(data, reward.linkedTaskId, reward.linkedTaskDate) : null
           return (
             <div key={reward.id} className={`rounded-lg border border-slate-200 p-3 text-sm ${claimed ? 'opacity-70' : ''}`}>
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   {reward.imageData ? (
                     <img src={reward.imageData} alt={reward.title} className="mb-2 h-24 w-full max-w-xs rounded object-cover" />
@@ -1528,10 +1528,10 @@ function RewardGroup({ title, rewards, level, data, getRewardStatus, isRewardUnl
                   {!reward.claimed && status === 'Unlocked' && reward.unlockType === 'task' && <p className="text-xs text-emerald-700">Unlocked by task completion</p>}
                   {reward.claimed && <p className="mt-1 inline-block rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Claimed on {reward.claimedAt ? new Date(reward.claimedAt).toLocaleDateString() : 'Unknown'}</p>}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button onClick={() => onEdit(reward)} className="rounded bg-slate-100 px-2 py-1">Edit</button>
                   {!reward.claimed && unlocked && <button onClick={() => onClaim(reward.id)} className="rounded bg-emerald-100 px-2 py-1 text-emerald-700">Claim reward</button>}
-                  <button onClick={() => onDelete(reward.id)} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                  <button onClick={() => onDelete(reward.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                 </div>
               </div>
             </div>
