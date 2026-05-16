@@ -957,6 +957,16 @@ function App() {
     }
   }
 
+  const resetAppData = () => {
+    const confirmReset = window.confirm('This will permanently clear all app data from this device. Continue?')
+    if (!confirmReset) return
+    localStorage.removeItem(STORAGE_KEY)
+    const fresh = loadData()
+    setData(fresh)
+    setActivePage('dashboard')
+    setBackupError('')
+  }
+
   useEffect(() => {
     const handleEsc = (event) => {
       if (event.key === "Escape") setSelectedHistoryEntry(null)
@@ -989,16 +999,12 @@ function App() {
             >
               Goals Page
             </button>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-            <span className="font-medium text-slate-700">Backup</span>
-            <button onClick={exportBackupData} className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium">Export Data</button>
-            <label className="cursor-pointer rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium">
-              Import Data
-              <input type="file" accept="application/json,.json" onChange={importBackupData} className="hidden" />
-            </label>
-            {backupError ? <span className="text-xs text-rose-600">{backupError}</span> : null}
+            <button
+              onClick={() => setActivePage('settings')}
+              className={`rounded-lg px-4 py-2 font-semibold ${activePage === 'settings' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`}
+            >
+              Settings
+            </button>
           </div>
         </header>
 
@@ -1038,39 +1044,6 @@ function App() {
                 })}
               </div>
 
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowEntryBlockManager((value) => !value)}
-                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium"
-                >
-                  Manage Today Entry blocks ({(data.entryBlocks || []).length})
-                </button>
-
-                {showEntryBlockManager && (
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
-                      <input value={newBlockTitle} onChange={(e) => setNewBlockTitle(e.target.value)} className="rounded border border-slate-300 p-1.5" placeholder="Block title" />
-                      <select value={newBlockType} onChange={(e) => setNewBlockType(e.target.value)} className="rounded border border-slate-300 p-1.5"><option value="list">list</option><option value="text">text</option></select>
-                      <input type="number" min="0" value={newBlockXpValue} onChange={(e) => setNewBlockXpValue(e.target.value)} className="rounded border border-slate-300 p-1.5" placeholder="XP" />
-                      <select value={newBlockIsPenalty ? 'penalty' : 'positive'} onChange={(e) => setNewBlockIsPenalty(e.target.value === 'penalty')} className="rounded border border-slate-300 p-1.5"><option value="positive">positive</option><option value="penalty">penalty</option></select>
-                      <button onClick={addEntryBlock} className="rounded bg-slate-800 px-2 py-1.5 text-white">Add</button>
-                    </div>
-
-                    <div className="mt-2 space-y-1">
-                      {(data.entryBlocks || []).map((block) => (
-                        <div key={block.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
-                          <input value={block.title} onChange={(e) => updateEntryBlockConfig(block.id, { title: e.target.value })} className="rounded border border-slate-300 p-1.5" />
-                          <select value={block.type} onChange={(e) => updateEntryBlockConfig(block.id, { type: e.target.value })} className="rounded border border-slate-300 p-1.5"><option value="list">list</option><option value="text">text</option></select>
-                          <input type="number" min="0" value={block.xpValue} onChange={(e) => updateEntryBlockConfig(block.id, { xpValue: e.target.value })} className="rounded border border-slate-300 p-1.5" />
-                          <select value={block.isPenalty ? 'penalty' : 'positive'} onChange={(e) => updateEntryBlockConfig(block.id, { isPenalty: e.target.value === 'penalty' })} className="rounded border border-slate-300 p-1.5"><option value="positive">positive</option><option value="penalty">penalty</option></select>
-                          <button onClick={() => deleteEntryBlock(block.id)} disabled={(data.entryBlocks || []).length <= 1} className="rounded bg-rose-100 px-2 py-1.5 text-rose-700 disabled:opacity-50">Delete</button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
             </section>
 
             <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
@@ -1090,29 +1063,8 @@ function App() {
                   <button onClick={addPlanTask} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">Add task</button>
                 </div>
               </div>
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryManager((value) => !value)}
-                  className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium"
-                >
-                  <span>{showCategoryManager ? 'Hide categories' : 'Manage categories'} ({categoryOptions.length})</span>
-                </button>
 
-                {showCategoryManager && (
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <div className="flex flex-wrap gap-2">
-                      <input value={newCategoryInput} onChange={(e) => setNewCategoryInput(e.target.value)} className="min-w-40 flex-1 rounded border border-slate-300 p-1.5 text-sm" placeholder="New category" />
-                      <button onClick={addTaskCategory} className="rounded bg-slate-800 px-2 py-1.5 text-xs text-white">Add</button>
-                    </div>
-                    <div className="mt-2 space-y-1">
-                      {categoryOptions.map((category) => (
-                        <CategoryRow key={category} category={category} canDelete={categoryOptions.length > 1 && category !== 'Other'} onRename={renameTaskCategory} onDelete={deleteTaskCategory} compact />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+
 
               <p className="mt-3 text-sm font-semibold text-slate-600">Completed plan XP: {dailyPlanCompletedXP} / {dailyPlanTotalXP} XP (included in Total XP)</p>
 
@@ -1340,6 +1292,71 @@ function App() {
                   </button>
                 ) : <p className="text-slate-500">No saved entry for this date.</p>}
               </div>
+            </section>
+          </div>
+        )}
+
+
+        {activePage === 'settings' && (
+          <div className="grid grid-cols-1 gap-4 lg:gap-6 xl:grid-cols-2">
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Backup and Restore</h2>
+              <p className="mt-1 text-sm text-slate-600">Export your current data to JSON and import a previous backup.</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                <button onClick={exportBackupData} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium">Export Data</button>
+                <label className="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium">
+                  Import Data
+                  <input type="file" accept="application/json,.json" onChange={importBackupData} className="hidden" />
+                </label>
+              </div>
+              {backupError ? <p className="mt-2 text-sm text-rose-600">{backupError}</p> : null}
+            </section>
+
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Task Categories</h2>
+              <p className="mt-1 text-sm text-slate-600">Manage categories used by Daily Plan tasks. "Other" stays as a safe fallback.</p>
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <div className="flex flex-wrap gap-2">
+                  <input value={newCategoryInput} onChange={(e) => setNewCategoryInput(e.target.value)} className="min-w-40 flex-1 rounded border border-slate-300 p-2 text-sm" placeholder="New category" />
+                  <button onClick={addTaskCategory} className="rounded bg-slate-800 px-3 py-2 text-sm text-white">Add</button>
+                </div>
+                <div className="mt-2 space-y-1">
+                  {categoryOptions.map((category) => (
+                    <CategoryRow key={category} category={category} canDelete={categoryOptions.length > 1 && category !== 'Other'} onRename={renameTaskCategory} onDelete={deleteTaskCategory} compact />
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm xl:col-span-2">
+              <h2 className="text-xl font-semibold">Today Entry Blocks</h2>
+              <p className="mt-1 text-sm text-slate-600">Customize blocks shown in Today Entry. Changes are applied immediately.</p>
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
+                  <input value={newBlockTitle} onChange={(e) => setNewBlockTitle(e.target.value)} className="rounded border border-slate-300 p-2" placeholder="Block title" />
+                  <select value={newBlockType} onChange={(e) => setNewBlockType(e.target.value)} className="rounded border border-slate-300 p-2"><option value="list">list</option><option value="text">text</option></select>
+                  <input type="number" min="0" value={newBlockXpValue} onChange={(e) => setNewBlockXpValue(e.target.value)} className="rounded border border-slate-300 p-2" placeholder="XP" />
+                  <select value={newBlockIsPenalty ? 'penalty' : 'positive'} onChange={(e) => setNewBlockIsPenalty(e.target.value === 'penalty')} className="rounded border border-slate-300 p-2"><option value="positive">positive</option><option value="penalty">penalty</option></select>
+                  <button onClick={addEntryBlock} className="rounded bg-slate-800 px-3 py-2 text-white">Add</button>
+                </div>
+                <div className="mt-2 space-y-1">
+                  {(data.entryBlocks || []).map((block) => (
+                    <div key={block.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_110px_120px_auto]">
+                      <input value={block.title} onChange={(e) => updateEntryBlockConfig(block.id, { title: e.target.value })} className="rounded border border-slate-300 p-2" />
+                      <select value={block.type} onChange={(e) => updateEntryBlockConfig(block.id, { type: e.target.value })} className="rounded border border-slate-300 p-2"><option value="list">list</option><option value="text">text</option></select>
+                      <input type="number" min="0" value={block.xpValue} onChange={(e) => updateEntryBlockConfig(block.id, { xpValue: e.target.value })} className="rounded border border-slate-300 p-2" />
+                      <select value={block.isPenalty ? 'penalty' : 'positive'} onChange={(e) => updateEntryBlockConfig(block.id, { isPenalty: e.target.value === 'penalty' })} className="rounded border border-slate-300 p-2"><option value="positive">positive</option><option value="penalty">penalty</option></select>
+                      <button onClick={() => deleteEntryBlock(block.id)} disabled={(data.entryBlocks || []).length <= 1} className="rounded bg-rose-100 px-3 py-2 text-rose-700 disabled:opacity-50">Delete</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm xl:col-span-2">
+              <h2 className="text-xl font-semibold">App Data</h2>
+              <p className="mt-1 text-sm text-slate-600">Danger zone: clear all saved tracker data from this device.</p>
+              <button onClick={resetAppData} className="mt-3 rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white">Reset App Data</button>
             </section>
           </div>
         )}
