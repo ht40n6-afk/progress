@@ -190,56 +190,61 @@ function normalizeReward(rawReward) {
   }
 }
 
+
+function normalizeAppData(parsed) {
+  const normalizedGoals = Array.isArray(parsed?.goals)
+    ? parsed.goals.map(normalizeGoal).filter(Boolean)
+    : []
+
+  const normalizedEntryBlocks = normalizeEntryBlocks(parsed?.entryBlocks)
+
+  const rawEntries = parsed?.entries && typeof parsed.entries === 'object' ? parsed.entries : {}
+  const normalizedEntries = Object.fromEntries(Object.entries(rawEntries).map(([date, entry]) => [date, normalizeEntry(entry, date, normalizedEntryBlocks)]))
+
+  const rawPlans = parsed?.dailyPlans && typeof parsed.dailyPlans === 'object' ? parsed.dailyPlans : {}
+  const normalizedPlans = Object.fromEntries(
+    Object.entries(rawPlans).map(([date, tasks]) => [
+      date,
+      Array.isArray(tasks)
+        ? tasks.map((task) => ({
+            id: task?.id || safeId(),
+            text: typeof task?.text === 'string' ? task.text : '',
+            completed: Boolean(task?.completed),
+            category: task?.category && typeof task.category === 'string' ? task.category : 'Other',
+            xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
+            timeBlock: TIME_BLOCKS.includes(task?.timeBlock) ? task.timeBlock : 'Anytime',
+            createdAt: task?.createdAt || new Date().toISOString(),
+          })).filter((task) => task.text.trim())
+        : [],
+    ]),
+  )
+
+  const normalizedTaskCategories = Array.isArray(parsed?.taskCategories)
+    ? Array.from(new Set(parsed.taskCategories.filter((c) => typeof c === 'string' && c.trim()).map((c) => c.trim())))
+    : DEFAULT_TASK_CATEGORIES
+  const finalTaskCategories = normalizedTaskCategories.length ? (normalizedTaskCategories.includes('Other') ? normalizedTaskCategories : [...normalizedTaskCategories, 'Other']) : DEFAULT_TASK_CATEGORIES
+
+  const normalizedRewards = Array.isArray(parsed?.rewards)
+    ? parsed.rewards.map(normalizeReward).filter(Boolean)
+    : []
+
+  return {
+    goals: normalizedGoals,
+    entries: normalizedEntries,
+    dailyPlans: normalizedPlans,
+    rewards: normalizedRewards,
+    taskCategories: finalTaskCategories,
+    entryBlocks: normalizedEntryBlocks,
+  }
+}
+
 function loadData() {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (!saved) return defaultState
 
   try {
     const parsed = JSON.parse(saved)
-    const normalizedGoals = Array.isArray(parsed.goals)
-      ? parsed.goals.map(normalizeGoal).filter(Boolean)
-      : []
-
-    const normalizedEntryBlocks = normalizeEntryBlocks(parsed.entryBlocks)
-
-    const rawEntries = parsed.entries && typeof parsed.entries === 'object' ? parsed.entries : {}
-    const normalizedEntries = Object.fromEntries(Object.entries(rawEntries).map(([date, entry]) => [date, normalizeEntry(entry, date, normalizedEntryBlocks)]))
-
-    const rawPlans = parsed.dailyPlans && typeof parsed.dailyPlans === 'object' ? parsed.dailyPlans : {}
-    const normalizedPlans = Object.fromEntries(
-      Object.entries(rawPlans).map(([date, tasks]) => [
-        date,
-        Array.isArray(tasks)
-          ? tasks.map((task) => ({
-              id: task?.id || safeId(),
-              text: typeof task?.text === 'string' ? task.text : '',
-              completed: Boolean(task?.completed),
-              category: task?.category && typeof task.category === 'string' ? task.category : 'Other',
-              xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
-              timeBlock: TIME_BLOCKS.includes(task?.timeBlock) ? task.timeBlock : 'Anytime',
-              createdAt: task?.createdAt || new Date().toISOString(),
-            })).filter((task) => task.text.trim())
-          : [],
-      ]),
-    )
-
-    const normalizedTaskCategories = Array.isArray(parsed.taskCategories)
-      ? Array.from(new Set(parsed.taskCategories.filter((c) => typeof c === 'string' && c.trim()).map((c) => c.trim())))
-      : DEFAULT_TASK_CATEGORIES
-    const finalTaskCategories = normalizedTaskCategories.length ? (normalizedTaskCategories.includes('Other') ? normalizedTaskCategories : [...normalizedTaskCategories, 'Other']) : DEFAULT_TASK_CATEGORIES
-
-    const normalizedRewards = Array.isArray(parsed.rewards)
-      ? parsed.rewards.map(normalizeReward).filter(Boolean)
-      : []
-
-    return {
-      goals: normalizedGoals,
-      entries: normalizedEntries,
-      dailyPlans: normalizedPlans,
-      rewards: normalizedRewards,
-      taskCategories: finalTaskCategories,
-      entryBlocks: normalizedEntryBlocks,
-    }
+    return normalizeAppData(parsed)
   } catch {
     return defaultState
   }
@@ -389,6 +394,8 @@ function App() {
   const [rewardLinkedTaskKey, setRewardLinkedTaskKey] = useState('')
   const [rewardImageData, setRewardImageData] = useState(null)
   const [removeRewardImage, setRemoveRewardImage] = useState(false)
+  const [backupError, setBackupError] = useState('')
+
 
   const todayEntry = data.entries[selectedDate] || createEmptyEntry(selectedDate)
 
@@ -915,6 +922,41 @@ function App() {
     updateData({ ...data, entryBlocks: blocks.filter((block) => block.id !== blockId) })
   }
 
+
+  const exportBackupData = () => {
+    const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, ' ')
+    const filename = `progress tracker backup ${dateStamp}.json`
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const importBackupData = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      const normalized = normalizeAppData(parsed)
+
+      const confirmImport = window.confirm('Importing will replace your current tracker data. Continue?')
+      if (!confirmImport) return
+
+      updateData(normalized)
+      setBackupError('')
+    } catch {
+      setBackupError('Invalid backup file. Please select a valid JSON export from this app.')
+    }
+  }
+
   useEffect(() => {
     const handleEsc = (event) => {
       if (event.key === "Escape") setSelectedHistoryEntry(null)
@@ -947,6 +989,16 @@ function App() {
             >
               Goals Page
             </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+            <span className="font-medium text-slate-700">Backup</span>
+            <button onClick={exportBackupData} className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium">Export Data</button>
+            <label className="cursor-pointer rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium">
+              Import Data
+              <input type="file" accept="application/json,.json" onChange={importBackupData} className="hidden" />
+            </label>
+            {backupError ? <span className="text-xs text-rose-600">{backupError}</span> : null}
           </div>
         </header>
 
