@@ -18,6 +18,8 @@ const defaultState = {
   goals: [],
   entries: {},
   dailyPlans: {},
+  recurringTasks: [],
+  recurringTaskCompletions: {},
   rewards: [],
   taskCategories: DEFAULT_TASK_CATEGORIES,
   entryBlocks: getDefaultEntryBlocks(),
@@ -127,6 +129,32 @@ function taskXpValue(task) {
   return Number(task?.xp) >= 0 ? Number(task.xp) : 10
 }
 
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function isRecurringTaskDueOnDate(task, date) {
+  if (!task?.active) return false
+  const dayName = WEEKDAY_NAMES[new Date(`${date}T00:00:00`).getDay()]
+  if (task.recurrenceType === 'daily') return true
+  if (task.recurrenceType === 'weekdays') return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].includes(dayName)
+  return Array.isArray(task.daysOfWeek) && task.daysOfWeek.includes(dayName)
+}
+
+function isRecurringTaskCompleted(date, taskId, data) {
+  return Boolean(data?.recurringTaskCompletions?.[date]?.[taskId])
+}
+
+function getRecurringTasksForDate(date, data) {
+  return (data?.recurringTasks || [])
+    .filter((task) => isRecurringTaskDueOnDate(task, date))
+    .map((task) => ({ ...task, completed: isRecurringTaskCompleted(date, task.id, data), isRecurring: true }))
+}
+
+function getAllTasksForDate(date, data) {
+  const manualTasks = Array.isArray(data?.dailyPlans?.[date]) ? data.dailyPlans[date] : []
+  const recurringTasks = getRecurringTasksForDate(date, data)
+  return [...manualTasks, ...recurringTasks]
+}
+
 function calculateCompletedTaskXP(tasks) {
   if (!Array.isArray(tasks)) return 0
   return tasks.filter((task) => task?.completed).reduce((sum, task) => sum + taskXpValue(task), 0)
@@ -135,7 +163,7 @@ function calculateCompletedTaskXP(tasks) {
 function calculateDayXP(date, data) {
   const entry = data?.entries?.[date]
   const entryXP = entry ? calculateEntryXP(entry, data?.entryBlocks) : 0
-  const completedTaskXP = calculateCompletedTaskXP(data?.dailyPlans?.[date])
+  const completedTaskXP = calculateCompletedTaskXP(getAllTasksForDate(date, data))
   return { entryXP, completedTaskXP, totalXP: entryXP + completedTaskXP }
 }
 
@@ -228,11 +256,36 @@ function normalizeAppData(parsed) {
     ? parsed.rewards.map(normalizeReward).filter(Boolean)
     : []
 
+  const normalizedRecurringTasks = Array.isArray(parsed?.recurringTasks)
+    ? parsed.recurringTasks.map((task) => ({
+        id: typeof task?.id === 'string' ? task.id : safeId(),
+        text: typeof task?.text === 'string' ? task.text : '',
+        category: task?.category && typeof task.category === 'string' ? task.category : 'Other',
+        xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
+        timeBlock: TIME_BLOCKS.includes(task?.timeBlock) ? task.timeBlock : 'Anytime',
+        recurrenceType: task?.recurrenceType === 'weekdays' || task?.recurrenceType === 'weekly' ? task.recurrenceType : 'daily',
+        daysOfWeek: Array.isArray(task?.daysOfWeek) ? task.daysOfWeek.filter((day) => WEEKDAY_NAMES.includes(day)) : [],
+        active: task?.active !== false,
+        createdAt: task?.createdAt || new Date().toISOString(),
+      })).filter((task) => task.text.trim())
+    : []
+
+  const normalizedRecurringTaskCompletions = parsed?.recurringTaskCompletions && typeof parsed.recurringTaskCompletions === 'object'
+    ? Object.fromEntries(
+        Object.entries(parsed.recurringTaskCompletions).map(([date, byTask]) => [
+          date,
+          byTask && typeof byTask === 'object' ? Object.fromEntries(Object.entries(byTask).map(([taskId, done]) => [taskId, Boolean(done)])) : {},
+        ]),
+      )
+    : {}
+
   return {
     goals: normalizedGoals,
     entries: normalizedEntries,
     dailyPlans: normalizedPlans,
     rewards: normalizedRewards,
+    recurringTasks: normalizedRecurringTasks,
+    recurringTaskCompletions: normalizedRecurringTaskCompletions,
     taskCategories: finalTaskCategories,
     entryBlocks: normalizedEntryBlocks,
   }
@@ -395,13 +448,17 @@ function App() {
   const [rewardImageData, setRewardImageData] = useState(null)
   const [removeRewardImage, setRemoveRewardImage] = useState(false)
   const [backupError, setBackupError] = useState('')
+  const [recurringTaskDraft, setRecurringTaskDraft] = useState({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
+  const [editingRecurringTaskId, setEditingRecurringTaskId] = useState(null)
 
 
   const todayEntry = data.entries[selectedDate] || createEmptyEntry(selectedDate)
 
 
   const planForSelectedDate = data.dailyPlans?.[selectedDate] || []
-  const activePlanTasks = planForSelectedDate
+  const recurringTasksForSelectedDate = getRecurringTasksForDate(selectedDate, data)
+  const allTasksForSelectedDate = [...planForSelectedDate, ...recurringTasksForSelectedDate]
+  const activePlanTasks = allTasksForSelectedDate
     .filter((task) => !task.completed)
     .slice()
     .sort((a, b) => {
@@ -409,7 +466,7 @@ function App() {
       const bi = TIME_BLOCKS.includes(b.timeBlock) ? TIME_BLOCKS.indexOf(b.timeBlock) : 0
       return ai - bi
     })
-  const completedPlanTasks = planForSelectedDate.filter((task) => task.completed)
+  const completedPlanTasks = allTasksForSelectedDate.filter((task) => task.completed)
   const categoryOptions = (Array.isArray(data.taskCategories) && data.taskCategories.length ? data.taskCategories : DEFAULT_TASK_CATEGORIES)
 
   const addPlanTask = () => {
@@ -447,7 +504,24 @@ function App() {
     })
   }
 
+  const toggleRecurringTaskCompletion = (date, taskId) => {
+    const current = Boolean(data.recurringTaskCompletions?.[date]?.[taskId])
+    const dateMap = { ...(data.recurringTaskCompletions?.[date] || {}), [taskId]: !current }
+    updateData({
+      ...data,
+      recurringTaskCompletions: {
+        ...(data.recurringTaskCompletions || {}),
+        [date]: dateMap,
+      },
+    })
+  }
+
   const togglePlanTask = (taskId) => {
+    const recurringTask = recurringTasksForSelectedDate.find((task) => task.id === taskId)
+    if (recurringTask) {
+      toggleRecurringTaskCompletion(selectedDate, taskId)
+      return
+    }
     const target = planForSelectedDate.find((task) => task.id === taskId)
     if (!target) return
     updatePlanTask(taskId, { completed: !target.completed })
@@ -492,8 +566,10 @@ function App() {
     })
   }
 
-  const dailyPlanTotalXP = planForSelectedDate.reduce((sum, task) => sum + taskXpValue(task), 0)
-  const dailyPlanCompletedXP = planForSelectedDate.filter((task) => task.completed).reduce((sum, task) => sum + taskXpValue(task), 0)
+  const manualPlanTotalXP = planForSelectedDate.reduce((sum, task) => sum + taskXpValue(task), 0)
+  const recurringPlanTotalXP = recurringTasksForSelectedDate.reduce((sum, task) => sum + taskXpValue(task), 0)
+  const dailyPlanCompletedXP = completedPlanTasks.reduce((sum, task) => sum + taskXpValue(task), 0)
+  const dailyPlanTotalXP = manualPlanTotalXP + recurringPlanTotalXP
 
   const totalXP = useMemo(() => {
     const allDates = new Set([
@@ -738,8 +814,7 @@ function App() {
   const achievementBullets = (entry) => ensureArray(entry?.achievements)
 
   const plannedTasksForDate = (date) => {
-    const tasks = data?.dailyPlans?.[date]
-    return Array.isArray(tasks) ? tasks : []
+    return getAllTasksForDate(date, data)
   }
 
 
@@ -754,6 +829,12 @@ function App() {
         completed: Boolean(task.completed),
       })),
     )
+    const recurringDates = Array.from(new Set([selectedDate, historyDate, today]))
+    recurringDates.forEach((date) => {
+      getRecurringTasksForDate(date, sourceData).forEach((task) => {
+        tasks.push({ id: task.id, date, text: `${safeText(task.text, 'Untitled task')} [Recurring]`, completed: Boolean(task.completed) })
+      })
+    })
     tasks.sort((a, b) => {
       if (a.date === selectedDate && b.date !== selectedDate) return -1
       if (b.date === selectedDate && a.date !== selectedDate) return 1
@@ -922,6 +1003,28 @@ function App() {
     updateData({ ...data, entryBlocks: blocks.filter((block) => block.id !== blockId) })
   }
 
+  const saveRecurringTask = () => {
+    if (!recurringTaskDraft.text.trim()) return
+    const normalized = {
+      id: editingRecurringTaskId || safeId(),
+      text: recurringTaskDraft.text.trim(),
+      category: categoryOptions.includes(recurringTaskDraft.category) ? recurringTaskDraft.category : 'Other',
+      xp: Number(recurringTaskDraft.xp) >= 0 ? Number(recurringTaskDraft.xp) : 10,
+      timeBlock: TIME_BLOCKS.includes(recurringTaskDraft.timeBlock) ? recurringTaskDraft.timeBlock : 'Anytime',
+      recurrenceType: recurringTaskDraft.recurrenceType === 'weekdays' || recurringTaskDraft.recurrenceType === 'weekly' ? recurringTaskDraft.recurrenceType : 'daily',
+      daysOfWeek: recurringTaskDraft.recurrenceType === 'weekly' ? recurringTaskDraft.daysOfWeek.filter((d) => WEEKDAY_NAMES.includes(d)) : [],
+      active: recurringTaskDraft.active !== false,
+      createdAt: new Date().toISOString(),
+    }
+    const existing = data.recurringTasks || []
+    const nextRecurringTasks = editingRecurringTaskId
+      ? existing.map((task) => (task.id === editingRecurringTaskId ? { ...task, ...normalized, createdAt: task.createdAt } : task))
+      : [...existing, normalized]
+    updateData({ ...data, recurringTasks: nextRecurringTasks })
+    setRecurringTaskDraft({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
+    setEditingRecurringTaskId(null)
+  }
+
 
   const exportBackupData = () => {
     const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, ' ')
@@ -1073,9 +1176,11 @@ function App() {
                   <div key={task.id} className={`flex flex-col items-stretch gap-2 rounded-lg border border-slate-200 p-2 sm:flex-row sm:items-center ${task.completed ? 'opacity-60' : ''}`}>
                     <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
                     <div className="w-full min-w-0 space-y-1">
+                      {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
                       <input
                         value={task.text}
                         onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
+                        disabled={Boolean(task.isRecurring)}
                         className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
                       />
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
@@ -1085,7 +1190,7 @@ function App() {
                       </div>
                     </div>
                     <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
-                    <button onClick={() => deletePlanTask(task.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                    <button onClick={() => deletePlanTask(task.id)} disabled={Boolean(task.isRecurring)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50">Delete</button>
                   </div>
                 ))}
                 {activePlanTasks.length === 0 && <p className="text-sm text-slate-500">No tasks planned yet.</p>}
@@ -1107,9 +1212,11 @@ function App() {
                       <div key={task.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 opacity-70">
                         <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
                         <div className="w-full min-w-0 space-y-1">
+                          {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
                           <input
                             value={task.text}
                             onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
+                            disabled={Boolean(task.isRecurring)}
                             className="w-full rounded border border-slate-300 p-1 line-through"
                           />
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
@@ -1119,7 +1226,7 @@ function App() {
                           </div>
                         </div>
                         <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
-                        <button onClick={() => deletePlanTask(task.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                        <button onClick={() => deletePlanTask(task.id)} disabled={Boolean(task.isRecurring)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50">Delete</button>
                       </div>
                     ))}
                     {completedPlanTasks.length === 0 && <p className="text-sm text-slate-500">No completed tasks yet.</p>}
@@ -1354,6 +1461,48 @@ function App() {
             </section>
 
             <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm xl:col-span-2">
+              <h2 className="text-xl font-semibold">Recurring Tasks</h2>
+              <p className="mt-1 text-sm text-slate-600">Create tasks that auto-appear on matching days in Daily Plan.</p>
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm space-y-2">
+                <input value={recurringTaskDraft.text} onChange={(e) => setRecurringTaskDraft({ ...recurringTaskDraft, text: e.target.value })} className="w-full rounded border border-slate-300 p-2" placeholder="Task name" />
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                  <select value={recurringTaskDraft.category} onChange={(e) => setRecurringTaskDraft({ ...recurringTaskDraft, category: e.target.value })} className="rounded border border-slate-300 p-2">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
+                  <select value={recurringTaskDraft.timeBlock} onChange={(e) => setRecurringTaskDraft({ ...recurringTaskDraft, timeBlock: e.target.value })} className="rounded border border-slate-300 p-2">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
+                  <input type="number" min="0" value={recurringTaskDraft.xp} onChange={(e) => setRecurringTaskDraft({ ...recurringTaskDraft, xp: e.target.value })} className="rounded border border-slate-300 p-2" placeholder="XP" />
+                  <select value={recurringTaskDraft.recurrenceType} onChange={(e) => setRecurringTaskDraft({ ...recurringTaskDraft, recurrenceType: e.target.value })} className="rounded border border-slate-300 p-2"><option value="daily">Daily</option><option value="weekdays">Weekdays</option><option value="weekly">Weekly (selected days)</option></select>
+                </div>
+                {recurringTaskDraft.recurrenceType === 'weekly' && (
+                  <div className="flex flex-wrap gap-2">
+                    {WEEKDAY_NAMES.map((day) => (
+                      <label key={day} className="flex items-center gap-1 text-xs rounded border border-slate-300 bg-white px-2 py-1">
+                        <input
+                          type="checkbox"
+                          checked={recurringTaskDraft.daysOfWeek.includes(day)}
+                          onChange={(e) => setRecurringTaskDraft({ ...recurringTaskDraft, daysOfWeek: e.target.checked ? [...recurringTaskDraft.daysOfWeek, day] : recurringTaskDraft.daysOfWeek.filter((d) => d !== day) })}
+                        />
+                        {day.slice(0, 3)}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <button onClick={saveRecurringTask} className="rounded bg-indigo-600 px-3 py-2 text-white">{editingRecurringTaskId ? 'Save recurring task' : 'Add recurring task'}</button>
+                {(data.recurringTasks || []).map((task) => (
+                  <div key={task.id} className="rounded border border-slate-200 bg-white p-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">{task.text} <span className="text-xs text-slate-500">({task.recurrenceType})</span></p>
+                      <div className="flex gap-2 text-xs">
+                        <button onClick={() => { setRecurringTaskDraft({ ...task }); setEditingRecurringTaskId(task.id) }} className="rounded bg-slate-100 px-2 py-1">Edit</button>
+                        <button onClick={() => updateData({ ...data, recurringTasks: (data.recurringTasks || []).map((r) => r.id === task.id ? { ...r, active: !r.active } : r) })} className="rounded bg-amber-100 px-2 py-1 text-amber-800">{task.active ? 'Pause' : 'Activate'}</button>
+                        <button onClick={() => updateData({ ...data, recurringTasks: (data.recurringTasks || []).filter((r) => r.id !== task.id) })} className="rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-600">{task.category} · {task.timeBlock} · {taskXpValue(task)} XP {task.recurrenceType === 'weekly' ? `· ${task.daysOfWeek.join(', ')}` : ''}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm xl:col-span-2">
               <h2 className="text-xl font-semibold">App Data</h2>
               <p className="mt-1 text-sm text-slate-600">Danger zone: clear all saved tracker data from this device.</p>
               <button onClick={resetAppData} className="mt-3 rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white">Reset App Data</button>
@@ -1558,7 +1707,7 @@ function TaskPreviewSection({ title, tasks }) {
           {safeTasks.map((task) => (
             <li key={task.id} className={`flex items-center gap-2 ${task.completed ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
               <input type="checkbox" checked={task.completed} readOnly className="h-4 w-4" />
-              <span>{safeText(task?.text)} <span className="text-xs text-slate-500">({task.category || 'General'} • {taskXpValue(task)} XP)</span></span>
+              <span>{safeText(task?.text)} {task.isRecurring ? <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">Recurring</span> : null} <span className="text-xs text-slate-500">({task.category || 'General'} • {taskXpValue(task)} XP)</span></span>
             </li>
           ))}
         </ul>
