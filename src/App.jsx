@@ -1495,8 +1495,7 @@ function App() {
                   {authUser ? <button onClick={logoutSupabase} className="rounded bg-slate-200 px-3 py-2 text-sm">Logout</button> : null}
                 </div>
                 <p className="text-xs text-slate-600">{authUser?.email ? `Logged in as ${authUser.email}` : 'Not logged in.'}</p>
-                <p className="text-xs text-slate-500">Supabase URL: {SUPABASE_URL || 'not set'}</p>
-                <p className="text-xs text-slate-500">App origin: {window.location.origin}</p>
+                <p className="text-xs text-slate-500">Cloud sync configured: {supabaseEnabled ? 'yes' : 'no'}</p>
                 {authMessage ? <p className="text-xs text-slate-600">{authMessage}</p> : null}
               </div>
             </section>
