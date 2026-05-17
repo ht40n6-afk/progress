@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 
 const STORAGE_KEY = 'life-gamification-tracker-v1'
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 const DEFAULT_TASK_CATEGORIES = ['Work', 'Health', 'Personal', 'Learning', 'Admin', 'Other']
 const TIME_BLOCKS = ['Anytime', '06:00 to 08:00', '08:00 to 10:00', '10:00 to 12:00', '12:00 to 14:00', '14:00 to 16:00', '16:00 to 18:00', '18:00 to 20:00', '20:00 to 22:00', '22:00 to 00:00']
@@ -448,6 +450,12 @@ function App() {
   const [rewardImageData, setRewardImageData] = useState(null)
   const [removeRewardImage, setRemoveRewardImage] = useState(false)
   const [backupError, setBackupError] = useState('')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authUser, setAuthUser] = useState(null)
+  const [authToken, setAuthToken] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
+  const [cloudMessage, setCloudMessage] = useState('')
   const [recurringTaskDraft, setRecurringTaskDraft] = useState({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
   const [editingRecurringTaskId, setEditingRecurringTaskId] = useState(null)
 
@@ -591,6 +599,80 @@ function App() {
   const updateData = (nextData) => {
     setData(nextData)
     saveData(nextData)
+  }
+
+  const supabaseEnabled = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
+
+  const supabaseRequest = async (path, options = {}, token = '') => {
+    const headers = {
+      apikey: SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    }
+    if (token) headers.Authorization = `Bearer ${token}`
+    const response = await fetch(`${SUPABASE_URL}${path}`, { ...options, headers })
+    const raw = await response.text()
+    const parsed = raw ? JSON.parse(raw) : null
+    if (!response.ok) throw new Error(parsed?.error_description || parsed?.message || 'Request failed')
+    return parsed
+  }
+
+  const loginToSupabase = async () => {
+    if (!supabaseEnabled) { setAuthMessage('Missing Supabase environment variables.'); return }
+    try {
+      const session = await supabaseRequest('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email: authEmail, password: authPassword }) })
+      setAuthUser(session.user || null)
+      setAuthToken(session.access_token || '')
+      setAuthMessage('Logged in.')
+    } catch (error) {
+      setAuthMessage(error.message || 'Login failed.')
+    }
+  }
+
+  const signupToSupabase = async () => {
+    if (!supabaseEnabled) { setAuthMessage('Missing Supabase environment variables.'); return }
+    try {
+      await supabaseRequest('/auth/v1/signup', { method: 'POST', body: JSON.stringify({ email: authEmail, password: authPassword }) })
+      setAuthMessage('Sign up submitted. Check your email confirmation settings.')
+    } catch (error) {
+      setAuthMessage(error.message || 'Sign up failed.')
+    }
+  }
+
+  const logoutSupabase = () => {
+    setAuthUser(null)
+    setAuthToken('')
+    setAuthMessage('Logged out.')
+  }
+
+  const saveToCloud = async () => {
+    if (!authUser || !authToken) { setCloudMessage('Log in to use cloud sync.'); return }
+    try {
+      await supabaseRequest('/rest/v1/user_app_data?on_conflict=user_id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates' },
+        body: JSON.stringify([{ user_id: authUser.id, data, updated_at: new Date().toISOString() }]),
+      }, authToken)
+      setCloudMessage('Saved to cloud.')
+    } catch (error) {
+      setCloudMessage(error.message || 'Cloud save failed.')
+    }
+  }
+
+  const loadFromCloud = async () => {
+    if (!authUser || !authToken) { setCloudMessage('Log in to use cloud sync.'); return }
+    const confirmLoad = window.confirm('Loading from cloud will replace current local data. Continue?')
+    if (!confirmLoad) return
+    try {
+      const rows = await supabaseRequest(`/rest/v1/user_app_data?select=data&user_id=eq.${authUser.id}&limit=1`, { method: 'GET' }, authToken)
+      const cloudData = rows?.[0]?.data
+      if (!cloudData) { setCloudMessage('No cloud backup found for this user.'); return }
+      const normalized = normalizeAppData(cloudData)
+      updateData(normalized)
+      setCloudMessage('Loaded from cloud.')
+    } catch (error) {
+      setCloudMessage(error.message || 'Cloud load failed.')
+    }
   }
 
   const updateTodayEntry = (updatedEntry) => {
@@ -1406,6 +1488,33 @@ function App() {
 
         {activePage === 'settings' && (
           <div className="grid grid-cols-1 gap-4 lg:gap-6 xl:grid-cols-2">
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Account</h2>
+              <p className="mt-1 text-sm text-slate-600">Log in to sync this tracker across devices.</p>
+              <div className="mt-3 space-y-2">
+                <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="Email" className="w-full rounded border border-slate-300 p-2 text-sm" />
+                <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="Password" className="w-full rounded border border-slate-300 p-2 text-sm" />
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={loginToSupabase} className="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">Login</button>
+                  <button onClick={signupToSupabase} className="rounded bg-slate-800 px-3 py-2 text-sm font-semibold text-white">Sign Up</button>
+                  {authUser ? <button onClick={logoutSupabase} className="rounded bg-slate-200 px-3 py-2 text-sm">Logout</button> : null}
+                </div>
+                <p className="text-xs text-slate-600">{authUser?.email ? `Logged in as ${authUser.email}` : 'Not logged in.'}</p>
+                {authMessage ? <p className="text-xs text-slate-600">{authMessage}</p> : null}
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Cloud Sync</h2>
+              <p className="mt-1 text-sm text-slate-600">{authUser ? 'Manually save/load full app data to cloud.' : 'Log in to use cloud sync.'}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={saveToCloud} className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Save to Cloud</button>
+                <button onClick={loadFromCloud} className="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">Load from Cloud</button>
+              </div>
+              {cloudMessage ? <p className="mt-2 text-xs text-slate-600">{cloudMessage}</p> : null}
+              {!supabaseEnabled ? <p className="mt-2 text-xs text-rose-600">Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable cloud sync.</p> : null}
+            </section>
+
             <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Backup and Restore</h2>
               <p className="mt-1 text-sm text-slate-600">Export your current data to JSON and import a previous backup.</p>
