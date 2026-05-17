@@ -1495,6 +1495,9 @@ function App() {
                   {authUser ? <button onClick={logoutSupabase} className="rounded bg-slate-200 px-3 py-2 text-sm">Logout</button> : null}
                 </div>
                 <p className="text-xs text-slate-600">{authUser?.email ? `Logged in as ${authUser.email}` : 'Not logged in.'}</p>
+                <p className="text-xs text-slate-500">
+                  Supabase URL configured: {SUPABASE_URL ? 'yes' : 'no'} · Supabase key configured: {SUPABASE_ANON_KEY ? 'yes' : 'no'}
+                </p>
                 {authMessage ? <p className="text-xs text-slate-600">{authMessage}</p> : null}
               </div>
             </section>
