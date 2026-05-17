@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createClient } from '@supabase/supabase-js'
 
 const STORAGE_KEY = 'life-gamification-tracker-v1'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null
 
 const DEFAULT_TASK_CATEGORIES = ['Work', 'Health', 'Personal', 'Learning', 'Admin', 'Other']
 const TIME_BLOCKS = ['Anytime', '06:00 to 08:00', '08:00 to 10:00', '10:00 to 12:00', '12:00 to 14:00', '14:00 to 16:00', '16:00 to 18:00', '18:00 to 20:00', '20:00 to 22:00', '22:00 to 00:00']
@@ -453,7 +455,6 @@ function App() {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authUser, setAuthUser] = useState(null)
-  const [authToken, setAuthToken] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [cloudMessage, setCloudMessage] = useState('')
   const [recurringTaskDraft, setRecurringTaskDraft] = useState({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
@@ -603,26 +604,12 @@ function App() {
 
   const supabaseEnabled = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
 
-  const supabaseRequest = async (path, options = {}, token = '') => {
-    const headers = {
-      apikey: SUPABASE_ANON_KEY,
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    }
-    if (token) headers.Authorization = `Bearer ${token}`
-    const response = await fetch(`${SUPABASE_URL}${path}`, { ...options, headers })
-    const raw = await response.text()
-    const parsed = raw ? JSON.parse(raw) : null
-    if (!response.ok) throw new Error(parsed?.error_description || parsed?.message || 'Request failed')
-    return parsed
-  }
-
   const loginToSupabase = async () => {
     if (!supabaseEnabled) { setAuthMessage('Missing Supabase environment variables.'); return }
     try {
-      const session = await supabaseRequest('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email: authEmail, password: authPassword }) })
-      setAuthUser(session.user || null)
-      setAuthToken(session.access_token || '')
+      const { data: authData, error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword })
+      if (error) throw error
+      setAuthUser(authData?.user || null)
       setAuthMessage('Logged in.')
     } catch (error) {
       setAuthMessage(error.message || 'Login failed.')
@@ -632,27 +619,34 @@ function App() {
   const signupToSupabase = async () => {
     if (!supabaseEnabled) { setAuthMessage('Missing Supabase environment variables.'); return }
     try {
-      await supabaseRequest('/auth/v1/signup', { method: 'POST', body: JSON.stringify({ email: authEmail, password: authPassword }) })
+      const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword })
+      if (error) throw error
       setAuthMessage('Sign up submitted. Check your email confirmation settings.')
     } catch (error) {
       setAuthMessage(error.message || 'Sign up failed.')
     }
   }
 
-  const logoutSupabase = () => {
+  const logoutSupabase = async () => {
+    if (supabaseEnabled) {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        setAuthMessage(error.message || 'Logout failed.')
+        return
+      }
+    }
     setAuthUser(null)
-    setAuthToken('')
     setAuthMessage('Logged out.')
   }
 
   const saveToCloud = async () => {
-    if (!authUser || !authToken) { setCloudMessage('Log in to use cloud sync.'); return }
+    if (!authUser) { setCloudMessage('Log in to use cloud sync.'); return }
     try {
-      await supabaseRequest('/rest/v1/user_app_data?on_conflict=user_id', {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates' },
-        body: JSON.stringify([{ user_id: authUser.id, data, updated_at: new Date().toISOString() }]),
-      }, authToken)
+      const { error } = await supabase.from('user_app_data').upsert(
+        [{ user_id: authUser.id, data, updated_at: new Date().toISOString() }],
+        { onConflict: 'user_id' },
+      )
+      if (error) throw error
       setCloudMessage('Saved to cloud.')
     } catch (error) {
       setCloudMessage(error.message || 'Cloud save failed.')
@@ -660,11 +654,12 @@ function App() {
   }
 
   const loadFromCloud = async () => {
-    if (!authUser || !authToken) { setCloudMessage('Log in to use cloud sync.'); return }
+    if (!authUser) { setCloudMessage('Log in to use cloud sync.'); return }
     const confirmLoad = window.confirm('Loading from cloud will replace current local data. Continue?')
     if (!confirmLoad) return
     try {
-      const rows = await supabaseRequest(`/rest/v1/user_app_data?select=data&user_id=eq.${authUser.id}&limit=1`, { method: 'GET' }, authToken)
+      const { data: rows, error } = await supabase.from('user_app_data').select('data').eq('user_id', authUser.id).limit(1)
+      if (error) throw error
       const cloudData = rows?.[0]?.data
       if (!cloudData) { setCloudMessage('No cloud backup found for this user.'); return }
       const normalized = normalizeAppData(cloudData)
