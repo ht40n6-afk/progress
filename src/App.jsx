@@ -457,6 +457,11 @@ function App() {
   const [authUser, setAuthUser] = useState(null)
   const [authMessage, setAuthMessage] = useState('')
   const [cloudMessage, setCloudMessage] = useState('')
+  const [isCloudSaving, setIsCloudSaving] = useState(false)
+  const [isCloudLoading, setIsCloudLoading] = useState(false)
+  const [lastCloudSavedAt, setLastCloudSavedAt] = useState('')
+  const [lastCloudLoadedAt, setLastCloudLoadedAt] = useState('')
+  const [cloudRecordUpdatedAt, setCloudRecordUpdatedAt] = useState('')
   const [recurringTaskDraft, setRecurringTaskDraft] = useState({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
   const [editingRecurringTaskId, setEditingRecurringTaskId] = useState(null)
 
@@ -640,33 +645,49 @@ function App() {
   }
 
   const saveToCloud = async () => {
+    if (isCloudSaving || isCloudLoading) return
     if (!authUser) { setCloudMessage('Log in to use cloud sync.'); return }
+    setIsCloudSaving(true)
+    setCloudMessage('Saving to cloud...')
     try {
-      const { error } = await supabase.from('user_app_data').upsert(
+      const { data: rows, error } = await supabase.from('user_app_data').upsert(
         [{ user_id: authUser.id, data, updated_at: new Date().toISOString() }],
-        { onConflict: 'user_id' },
-      )
+        { onConflict: 'user_id' }
+      ).select('updated_at').limit(1)
       if (error) throw error
-      setCloudMessage('Saved to cloud.')
+      const now = new Date().toISOString()
+      setLastCloudSavedAt(now)
+      setCloudRecordUpdatedAt(rows?.[0]?.updated_at || now)
+      setCloudMessage('Saved to cloud successfully.')
     } catch (error) {
       setCloudMessage(error.message || 'Cloud save failed.')
+    } finally {
+      setIsCloudSaving(false)
     }
   }
 
   const loadFromCloud = async () => {
+    if (isCloudSaving || isCloudLoading) return
     if (!authUser) { setCloudMessage('Log in to use cloud sync.'); return }
     const confirmLoad = window.confirm('Loading from cloud will replace current local data. Continue?')
     if (!confirmLoad) return
+    setIsCloudLoading(true)
+    setCloudMessage('Loading from cloud...')
     try {
-      const { data: rows, error } = await supabase.from('user_app_data').select('data').eq('user_id', authUser.id).limit(1)
+      const { data: rows, error } = await supabase.from('user_app_data').select('data,updated_at').eq('user_id', authUser.id).limit(1)
       if (error) throw error
       const cloudData = rows?.[0]?.data
       if (!cloudData) { setCloudMessage('No cloud backup found for this user.'); return }
       const normalized = normalizeAppData(cloudData)
       updateData(normalized)
-      setCloudMessage('Loaded from cloud.')
+      const now = new Date().toISOString()
+      setLastCloudLoadedAt(now)
+      if (rows?.[0]?.updated_at) setCloudRecordUpdatedAt(rows[0].updated_at)
+      setCloudMessage('Loaded from cloud successfully.')
     } catch (error) {
       setCloudMessage(error.message || 'Cloud load failed.')
+    } finally {
+      setIsCloudLoading(false)
     }
   }
 
@@ -1504,10 +1525,13 @@ function App() {
               <h2 className="text-xl font-semibold">Cloud Sync</h2>
               <p className="mt-1 text-sm text-slate-600">{authUser ? 'Manually save/load full app data to cloud.' : 'Log in to use cloud sync.'}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button onClick={saveToCloud} className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Save to Cloud</button>
-                <button onClick={loadFromCloud} className="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">Load from Cloud</button>
+                <button disabled={isCloudSaving || isCloudLoading} onClick={saveToCloud} className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{isCloudSaving ? 'Saving...' : 'Save to Cloud'}</button>
+                <button disabled={isCloudSaving || isCloudLoading} onClick={loadFromCloud} className="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{isCloudLoading ? 'Loading...' : 'Load from Cloud'}</button>
               </div>
               {cloudMessage ? <p className="mt-2 text-xs text-slate-600">{cloudMessage}</p> : null}
+              {lastCloudSavedAt ? <p className="mt-1 text-xs text-slate-500">Last saved to cloud: {new Date(lastCloudSavedAt).toLocaleString()}</p> : null}
+              {lastCloudLoadedAt ? <p className="mt-1 text-xs text-slate-500">Last loaded from cloud: {new Date(lastCloudLoadedAt).toLocaleString()}</p> : null}
+              {cloudRecordUpdatedAt ? <p className="mt-1 text-xs text-slate-500">Cloud record updated at: {new Date(cloudRecordUpdatedAt).toLocaleString()}</p> : null}
               {!supabaseEnabled ? <p className="mt-2 text-xs text-rose-600">Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable cloud sync.</p> : null}
             </section>
 
