@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 const STORAGE_KEY = 'life-gamification-tracker-v1'
+const SYNC_META_KEY = 'life-gamification-tracker-sync-meta-v1'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null
@@ -462,6 +463,9 @@ function App() {
   const [lastCloudSavedAt, setLastCloudSavedAt] = useState('')
   const [lastCloudLoadedAt, setLastCloudLoadedAt] = useState('')
   const [cloudRecordUpdatedAt, setCloudRecordUpdatedAt] = useState('')
+  const [localLastModifiedAt, setLocalLastModifiedAt] = useState(new Date().toISOString())
+  const [autoSyncStatus, setAutoSyncStatus] = useState('Idle')
+  const [cloudNewerPrompt, setCloudNewerPrompt] = useState(null)
   const [recurringTaskDraft, setRecurringTaskDraft] = useState({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
   const [editingRecurringTaskId, setEditingRecurringTaskId] = useState(null)
 
@@ -605,6 +609,11 @@ function App() {
   const updateData = (nextData) => {
     setData(nextData)
     saveData(nextData)
+    setLocalLastModifiedAt(new Date().toISOString())
+  }
+
+  const persistSyncMeta = (meta) => {
+    localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta))
   }
 
   const supabaseEnabled = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
@@ -650,17 +659,40 @@ function App() {
     setIsCloudSaving(true)
     setCloudMessage('Saving to cloud...')
     try {
+      const { data: existingRows, error: checkError } = await supabase
+        .from('user_app_data')
+        .select('updated_at')
+        .eq('user_id', authUser.id)
+        .limit(1)
+      if (checkError) throw checkError
+      const latestCloudUpdatedAt = existingRows?.[0]?.updated_at || ''
+      if (
+        latestCloudUpdatedAt &&
+        cloudRecordUpdatedAt &&
+        new Date(latestCloudUpdatedAt).getTime() > new Date(cloudRecordUpdatedAt).getTime()
+      ) {
+        const confirmOverwrite = window.confirm('Cloud data may include changes from another device. Saving now may overwrite them.')
+        if (!confirmOverwrite) {
+          setCloudMessage('Cloud save canceled.')
+          setAutoSyncStatus('Auto save canceled')
+          return
+        }
+      }
+
       const { data: rows, error } = await supabase.from('user_app_data').upsert(
-        [{ user_id: authUser.id, data, updated_at: new Date().toISOString() }],
+        [{ user_id: authUser.id, data, updated_at: localLastModifiedAt || new Date().toISOString() }],
         { onConflict: 'user_id' }
       ).select('updated_at').limit(1)
       if (error) throw error
       const now = new Date().toISOString()
       setLastCloudSavedAt(now)
       setCloudRecordUpdatedAt(rows?.[0]?.updated_at || now)
+      persistSyncMeta({ localUpdatedAt: localLastModifiedAt, lastCloudSavedAt: now, lastCloudLoadedAt, lastKnownCloudUpdatedAt: rows?.[0]?.updated_at || now })
       setCloudMessage('Saved to cloud successfully.')
+      setAutoSyncStatus('Saved to cloud')
     } catch (error) {
       setCloudMessage(error.message || 'Cloud save failed.')
+      setAutoSyncStatus('Auto save failed')
     } finally {
       setIsCloudSaving(false)
     }
@@ -683,6 +715,7 @@ function App() {
       const now = new Date().toISOString()
       setLastCloudLoadedAt(now)
       if (rows?.[0]?.updated_at) setCloudRecordUpdatedAt(rows[0].updated_at)
+      persistSyncMeta({ localUpdatedAt: now, lastCloudSavedAt, lastCloudLoadedAt: now, lastKnownCloudUpdatedAt: rows?.[0]?.updated_at || cloudRecordUpdatedAt || '' })
       setCloudMessage('Loaded from cloud successfully.')
     } catch (error) {
       setCloudMessage(error.message || 'Cloud load failed.')
@@ -690,6 +723,47 @@ function App() {
       setIsCloudLoading(false)
     }
   }
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SYNC_META_KEY)
+      if (!raw) return
+      const meta = JSON.parse(raw)
+      if (meta.localUpdatedAt) setLocalLastModifiedAt(meta.localUpdatedAt)
+      if (meta.lastCloudSavedAt) setLastCloudSavedAt(meta.lastCloudSavedAt)
+      if (meta.lastCloudLoadedAt) setLastCloudLoadedAt(meta.lastCloudLoadedAt)
+      if (meta.lastKnownCloudUpdatedAt) setCloudRecordUpdatedAt(meta.lastKnownCloudUpdatedAt)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    persistSyncMeta({ localUpdatedAt: localLastModifiedAt, lastCloudSavedAt, lastCloudLoadedAt, lastKnownCloudUpdatedAt: cloudRecordUpdatedAt || '' })
+  }, [localLastModifiedAt, lastCloudSavedAt, lastCloudLoadedAt, cloudRecordUpdatedAt])
+
+  useEffect(() => {
+    if (!authUser || !supabaseEnabled) return
+    const checkCloud = async () => {
+      const { data: rows, error } = await supabase.from('user_app_data').select('data,updated_at').eq('user_id', authUser.id).limit(1)
+      if (error || !rows?.[0]?.updated_at) return
+      const cloudUpdatedAt = rows[0].updated_at
+      setCloudRecordUpdatedAt(cloudUpdatedAt)
+      if (new Date(cloudUpdatedAt).getTime() > new Date(localLastModifiedAt).getTime() && cloudUpdatedAt !== lastCloudLoadedAt) {
+        setCloudNewerPrompt(rows[0])
+      }
+    }
+    checkCloud()
+  }, [authUser, supabaseEnabled])
+
+  useEffect(() => {
+    if (!authUser || !supabaseEnabled) return
+    if (isCloudSaving || isCloudLoading || cloudNewerPrompt) return
+    setAutoSyncStatus('Auto save pending')
+    const t = setTimeout(async () => {
+      setAutoSyncStatus('Saving to cloud')
+      await saveToCloud()
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [data, authUser, cloudNewerPrompt])
 
   const updateTodayEntry = (updatedEntry) => {
     const normalized = normalizeEntry({ ...updatedEntry, date: selectedDate }, selectedDate)
@@ -1517,6 +1591,8 @@ function App() {
                 </div>
                 <p className="text-xs text-slate-600">{authUser?.email ? `Logged in as ${authUser.email}` : 'Not logged in.'}</p>
                 <p className="text-xs text-slate-500">Cloud sync configured: {supabaseEnabled ? 'yes' : 'no'}</p>
+                <p className="text-xs text-slate-500">Auto sync: on</p>
+                <p className="text-xs text-slate-500">Last local change time: {localLastModifiedAt ? new Date(localLastModifiedAt).toLocaleString() : 'n/a'}</p>
                 {authMessage ? <p className="text-xs text-slate-600">{authMessage}</p> : null}
               </div>
             </section>
@@ -1531,7 +1607,17 @@ function App() {
               {cloudMessage ? <p className="mt-2 text-xs text-slate-600">{cloudMessage}</p> : null}
               {lastCloudSavedAt ? <p className="mt-1 text-xs text-slate-500">Last saved to cloud: {new Date(lastCloudSavedAt).toLocaleString()}</p> : null}
               {lastCloudLoadedAt ? <p className="mt-1 text-xs text-slate-500">Last loaded from cloud: {new Date(lastCloudLoadedAt).toLocaleString()}</p> : null}
-              {cloudRecordUpdatedAt ? <p className="mt-1 text-xs text-slate-500">Cloud record updated at: {new Date(cloudRecordUpdatedAt).toLocaleString()}</p> : null}
+              {cloudRecordUpdatedAt ? <p className="mt-1 text-xs text-slate-500">Last known cloud update time: {new Date(cloudRecordUpdatedAt).toLocaleString()}</p> : null}
+              <p className="mt-1 text-xs text-slate-500">Current sync status: {autoSyncStatus}</p>
+              {cloudNewerPrompt ? (
+                <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs">
+                  <p>Cloud data appears newer than this device. Load cloud data?</p>
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={async () => { await loadFromCloud(); setCloudNewerPrompt(null) }} className="rounded bg-indigo-600 px-2 py-1 text-white">Load cloud data</button>
+                    <button onClick={() => setCloudNewerPrompt(null)} className="rounded bg-slate-200 px-2 py-1">Keep local data</button>
+                  </div>
+                </div>
+              ) : null}
               {!supabaseEnabled ? <p className="mt-2 text-xs text-rose-600">Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable cloud sync.</p> : null}
             </section>
 
