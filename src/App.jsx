@@ -456,6 +456,7 @@ function App() {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authUser, setAuthUser] = useState(null)
+  const [authToken, setAuthToken] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [cloudMessage, setCloudMessage] = useState('')
   const [isCloudSaving, setIsCloudSaving] = useState(false)
@@ -624,6 +625,7 @@ function App() {
       const { data: authData, error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword })
       if (error) throw error
       setAuthUser(authData?.user || null)
+      setAuthToken(authData?.session?.access_token || '')
       setAuthMessage('Logged in.')
     } catch (error) {
       setAuthMessage(error.message || 'Login failed.')
@@ -650,6 +652,7 @@ function App() {
       }
     }
     setAuthUser(null)
+    setAuthToken('')
     setAuthMessage('Logged out.')
   }
 
@@ -1241,6 +1244,35 @@ function App() {
     setActivePage('dashboard')
     setBackupError('')
   }
+
+  useEffect(() => {
+    if (!supabaseEnabled || !supabase) return undefined
+    let alive = true
+
+    const bootstrapSession = async () => {
+      const { data, error } = await supabase.auth.getSession()
+      if (!alive) return
+      if (error) {
+        setAuthMessage(error.message || 'Failed to read auth session.')
+        return
+      }
+      const session = data?.session || null
+      setAuthUser(session?.user || null)
+      setAuthToken(session?.access_token || '')
+    }
+
+    bootstrapSession()
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user || null)
+      setAuthToken(session?.access_token || '')
+    })
+
+    return () => {
+      alive = false
+      listener?.subscription?.unsubscribe()
+    }
+  }, [supabaseEnabled])
 
   useEffect(() => {
     const handleEsc = (event) => {
