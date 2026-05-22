@@ -246,6 +246,7 @@ function normalizeAppData(parsed) {
             category: task?.category && typeof task.category === 'string' ? task.category : 'Other',
             xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
             timeBlock: TIME_BLOCKS.includes(task?.timeBlock) ? task.timeBlock : 'Anytime',
+            comment: typeof task?.comment === 'string' ? task.comment : '',
             createdAt: task?.createdAt || new Date().toISOString(),
           })).filter((task) => task.text.trim())
         : [],
@@ -467,6 +468,7 @@ function App() {
   const [localLastModifiedAt, setLocalLastModifiedAt] = useState(new Date().toISOString())
   const [autoSyncStatus, setAutoSyncStatus] = useState('Idle')
   const [cloudNewerPrompt, setCloudNewerPrompt] = useState(null)
+  const [openTaskCommentEditors, setOpenTaskCommentEditors] = useState({})
   const [recurringTaskDraft, setRecurringTaskDraft] = useState({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
   const [editingRecurringTaskId, setEditingRecurringTaskId] = useState(null)
 
@@ -497,6 +499,7 @@ function App() {
       category: categoryOptions.includes(planCategoryInput) ? planCategoryInput : 'Other',
       xp: Number(planXpInput) >= 0 ? Number(planXpInput) : 10,
       timeBlock: TIME_BLOCKS.includes(planTimeBlockInput) ? planTimeBlockInput : 'Anytime',
+      comment: '',
       createdAt: new Date().toISOString(),
     }
     updateData({
@@ -1387,6 +1390,26 @@ function App() {
                         disabled={Boolean(task.isRecurring)}
                         className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
                       />
+                      {task.comment ? <p className="text-xs text-slate-500 line-clamp-2">{task.comment}</p> : null}
+                      {!task.isRecurring ? (
+                        <div>
+                          <button type="button" onClick={() => setOpenTaskCommentEditors((prev) => ({ ...prev, [task.id]: !prev[task.id] }))} className="text-xs text-indigo-600">
+                            {task.comment ? 'Edit comment' : 'Add comment'}
+                          </button>
+                          {openTaskCommentEditors[task.id] ? (
+                            <div className="mt-1 space-y-1">
+                              <textarea
+                                value={typeof task.comment === 'string' ? task.comment : ''}
+                                onChange={(e) => updatePlanTask(task.id, { comment: e.target.value })}
+                                className="w-full rounded border border-slate-300 p-2 text-sm"
+                                rows={2}
+                                placeholder="Add task comment"
+                              />
+                              <button type="button" onClick={() => updatePlanTask(task.id, { comment: '' })} className="text-xs text-rose-600">Clear comment</button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
                         <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
                         <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
@@ -1423,6 +1446,26 @@ function App() {
                             disabled={Boolean(task.isRecurring)}
                             className="w-full rounded border border-slate-300 p-1 line-through"
                           />
+                          {task.comment ? <p className="text-xs text-slate-500 line-clamp-2">{task.comment}</p> : null}
+                          {!task.isRecurring ? (
+                            <div>
+                              <button type="button" onClick={() => setOpenTaskCommentEditors((prev) => ({ ...prev, [task.id]: !prev[task.id] }))} className="text-xs text-indigo-600">
+                                {task.comment ? 'Edit comment' : 'Add comment'}
+                              </button>
+                              {openTaskCommentEditors[task.id] ? (
+                                <div className="mt-1 space-y-1">
+                                  <textarea
+                                    value={typeof task.comment === 'string' ? task.comment : ''}
+                                    onChange={(e) => updatePlanTask(task.id, { comment: e.target.value })}
+                                    className="w-full rounded border border-slate-300 p-2 text-sm"
+                                    rows={2}
+                                    placeholder="Add task comment"
+                                  />
+                                  <button type="button" onClick={() => updatePlanTask(task.id, { comment: '' })} className="text-xs text-rose-600">Clear comment</button>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
                             <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
                             <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
@@ -1954,7 +1997,11 @@ function TaskPreviewSection({ title, tasks }) {
           {safeTasks.map((task) => (
             <li key={task.id} className={`flex items-center gap-2 ${task.completed ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
               <input type="checkbox" checked={task.completed} readOnly className="h-4 w-4" />
-              <span>{safeText(task?.text)} {task.isRecurring ? <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">Recurring</span> : null} <span className="text-xs text-slate-500">({task.category || 'General'} • {taskXpValue(task)} XP)</span></span>
+              <span>
+                {safeText(task?.text)} {task.isRecurring ? <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">Recurring</span> : null}{' '}
+                <span className="text-xs text-slate-500">({task.category || 'General'} • {task.timeBlock || 'Anytime'} • {taskXpValue(task)} XP • {task.completed ? 'Completed' : 'Pending'})</span>
+                {task.comment ? <span className="mt-0.5 block text-xs text-slate-500">Note: {task.comment}</span> : null}
+              </span>
             </li>
           ))}
         </ul>
