@@ -83,17 +83,26 @@ function createEmptyEntry(date) {
 
 function normalizeEntry(rawEntry, date, entryBlocks = getDefaultEntryBlocks()) {
   const entry = rawEntry && typeof rawEntry === 'object' ? rawEntry : {}
+  const existingBlockValues = entry.blockValues && typeof entry.blockValues === 'object' ? entry.blockValues : {}
   const blockValues = {}
-  const safeList = (value) => (Array.isArray(value) ? value : [])
+  const safeList = (value) => ensureArray(value)
   const safeString = (value) => (typeof value === 'string' ? value : '')
+  const hasBlockValue = (blockId) => Object.prototype.hasOwnProperty.call(existingBlockValues, blockId)
 
   entryBlocks.forEach((block) => {
-    if (block.id === 'achievements') blockValues[block.id] = safeList(entry.achievements)
+    if (block.type === 'text') {
+      if (hasBlockValue(block.id)) blockValues[block.id] = safeString(existingBlockValues[block.id])
+      else if (block.id === 'lesson') blockValues[block.id] = safeString(entry.lesson)
+      else blockValues[block.id] = ''
+      return
+    }
+
+    if (hasBlockValue(block.id)) blockValues[block.id] = safeList(existingBlockValues[block.id])
+    else if (block.id === 'achievements') blockValues[block.id] = safeList(entry.achievements)
     else if (block.id === 'gratitude') blockValues[block.id] = safeList(entry.gratitude)
     else if (block.id === 'goalNotes') blockValues[block.id] = safeList(entry.goalNotes)
     else if (block.id === 'badActions') blockValues[block.id] = safeList(entry.badActions)
-    else if (block.id === 'lesson') blockValues[block.id] = safeString(entry.lesson)
-    else blockValues[block.id] = block.type === 'text' ? safeString(entry?.blockValues?.[block.id]) : safeList(entry?.blockValues?.[block.id])
+    else blockValues[block.id] = []
   })
 
   const normalized = {
@@ -772,7 +781,7 @@ function App() {
   }, [data, authUser, cloudNewerPrompt])
 
   const updateTodayEntry = (updatedEntry) => {
-    const normalized = normalizeEntry({ ...updatedEntry, date: selectedDate }, selectedDate)
+    const normalized = normalizeEntry({ ...updatedEntry, date: selectedDate }, selectedDate, data.entryBlocks)
     updateData({
       ...data,
       entries: {
@@ -823,6 +832,26 @@ function App() {
     if (blockId === 'lesson') updatedEntry.lesson = value
 
     updateTodayEntry(updatedEntry)
+    return true
+  }
+
+  const addEntryBlockListItem = (blockId, value) => {
+    const trimmed = typeof value === 'string' ? value.trim() : ''
+    if (!trimmed) return false
+
+    const block = (data.entryBlocks || []).find((entryBlock) => entryBlock.id === blockId)
+    if (!block || block.type !== 'list') return false
+
+    const currentItems = getEntryBlockValue(todayEntry, block)
+    return updateEntryBlockValue(blockId, [...currentItems, trimmed])
+  }
+
+  const removeEntryBlockListItem = (blockId, indexToRemove) => {
+    const block = (data.entryBlocks || []).find((entryBlock) => entryBlock.id === blockId)
+    if (!block || block.type !== 'list') return false
+
+    const currentItems = getEntryBlockValue(todayEntry, block)
+    return updateEntryBlockValue(blockId, currentItems.filter((_, index) => index !== indexToRemove))
   }
 
   const addListItem = (field, value, setValue) => {
@@ -1333,8 +1362,8 @@ function App() {
                         title={block.title}
                         xpText={blockXpLabel(block)}
                         items={value}
-                        onAdd={(itemText) => updateEntryBlockValue(block.id, [...value, itemText])}
-                        onRemove={(indexToRemove) => updateEntryBlockValue(block.id, value.filter((_, index) => index !== indexToRemove))}
+                        onAdd={(itemText) => addEntryBlockListItem(block.id, itemText)}
+                        onRemove={(indexToRemove) => removeEntryBlockListItem(block.id, indexToRemove)}
                       />
                     )
                   }
@@ -1927,8 +1956,8 @@ function DynamicListBlock({ title, xpText, items, onAdd, onRemove }) {
   const addItem = () => {
     const trimmed = input.trim()
     if (!trimmed) return
-    onAdd(trimmed)
-    setInput('')
+    const wasAdded = onAdd(trimmed)
+    if (wasAdded !== false) setInput('')
   }
 
   return (
