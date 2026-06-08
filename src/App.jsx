@@ -248,13 +248,14 @@ function normalizeAppData(parsed) {
     Object.entries(rawPlans).map(([date, tasks]) => [
       date,
       Array.isArray(tasks)
-        ? tasks.map((task) => ({
+        ? tasks.map((task, index) => ({
             id: task?.id || safeId(),
             text: typeof task?.text === 'string' ? task.text : '',
             completed: Boolean(task?.completed),
             category: task?.category && typeof task.category === 'string' ? task.category : 'Other',
             xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
             timeBlock: TIME_BLOCKS.includes(task?.timeBlock) ? task.timeBlock : 'Anytime',
+            order: Number.isFinite(Number(task?.order)) ? Number(task.order) : index,
             comment: typeof task?.comment === 'string' ? task.comment : '',
             createdAt: task?.createdAt || new Date().toISOString(),
           })).filter((task) => task.text.trim())
@@ -488,14 +489,20 @@ function App() {
   const planForSelectedDate = data.dailyPlans?.[selectedDate] || []
   const recurringTasksForSelectedDate = getRecurringTasksForDate(selectedDate, data)
   const allTasksForSelectedDate = [...planForSelectedDate, ...recurringTasksForSelectedDate]
-  const activePlanTasks = allTasksForSelectedDate
-    .filter((task) => !task.completed)
+  const manualOrderValue = (task, fallback = 0) => (Number.isFinite(Number(task?.order)) ? Number(task.order) : fallback)
+  const sortManualTasksByOrder = (tasks) => tasks
+    .slice()
+    .sort((a, b) => manualOrderValue(a) - manualOrderValue(b) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id).localeCompare(String(b.id)))
+  const sortRecurringTasksByTimeBlock = (tasks) => tasks
     .slice()
     .sort((a, b) => {
-      const ai = TIME_BLOCKS.includes(a.timeBlock) ? TIME_BLOCKS.indexOf(a.timeBlock) : 0
-      const bi = TIME_BLOCKS.includes(b.timeBlock) ? TIME_BLOCKS.indexOf(b.timeBlock) : 0
-      return ai - bi
+      const ai = TIME_BLOCKS.includes(a.timeBlock) ? TIME_BLOCKS.indexOf(a.timeBlock) : TIME_BLOCKS.indexOf('Anytime')
+      const bi = TIME_BLOCKS.includes(b.timeBlock) ? TIME_BLOCKS.indexOf(b.timeBlock) : TIME_BLOCKS.indexOf('Anytime')
+      return ai - bi || String(a.text).localeCompare(String(b.text))
     })
+  const activeManualPlanTasks = sortManualTasksByOrder(planForSelectedDate.filter((task) => !task.completed))
+  const activeRecurringPlanTasks = sortRecurringTasksByTimeBlock(recurringTasksForSelectedDate.filter((task) => !task.completed))
+  const activePlanTasks = [...activeManualPlanTasks, ...activeRecurringPlanTasks]
   const completedPlanTasks = allTasksForSelectedDate.filter((task) => task.completed)
   const categoryOptions = (Array.isArray(data.taskCategories) && data.taskCategories.length ? data.taskCategories : DEFAULT_TASK_CATEGORIES)
 
@@ -508,6 +515,7 @@ function App() {
       category: categoryOptions.includes(planCategoryInput) ? planCategoryInput : 'Other',
       xp: Number(planXpInput) >= 0 ? Number(planXpInput) : 10,
       timeBlock: TIME_BLOCKS.includes(planTimeBlockInput) ? planTimeBlockInput : 'Anytime',
+      order: planForSelectedDate.length ? Math.max(...planForSelectedDate.map((task, index) => manualOrderValue(task, index))) + 1 : 0,
       comment: '',
       createdAt: new Date().toISOString(),
     }
@@ -531,6 +539,26 @@ function App() {
         [selectedDate]: planForSelectedDate.map((task) =>
           task.id === taskId ? { ...task, ...updates, category: categoryOptions.includes(updates.category ?? task.category) ? (updates.category ?? task.category) : 'Other', timeBlock: TIME_BLOCKS.includes(updates.timeBlock ?? task.timeBlock) ? (updates.timeBlock ?? task.timeBlock) : 'Anytime' } : task,
         ),
+      },
+    })
+  }
+
+  const movePlanTask = (taskId, direction) => {
+    const currentIndex = activeManualPlanTasks.findIndex((task) => task.id === taskId)
+    const nextIndex = currentIndex + direction
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= activeManualPlanTasks.length) return
+
+    const reorderedActiveTasks = [...activeManualPlanTasks]
+    ;[reorderedActiveTasks[currentIndex], reorderedActiveTasks[nextIndex]] = [reorderedActiveTasks[nextIndex], reorderedActiveTasks[currentIndex]]
+    const orderUpdates = Object.fromEntries(reorderedActiveTasks.map((task, index) => [task.id, index]))
+
+    updateData({
+      ...data,
+      dailyPlans: {
+        ...data.dailyPlans,
+        [selectedDate]: planForSelectedDate.map((task) => (
+          Object.prototype.hasOwnProperty.call(orderUpdates, task.id) ? { ...task, order: orderUpdates[task.id] } : task
+        )),
       },
     })
   }
@@ -1408,47 +1436,61 @@ function App() {
               <p className="mt-3 text-sm font-semibold text-slate-600">Completed plan XP: {dailyPlanCompletedXP} / {dailyPlanTotalXP} XP (included in Total XP)</p>
 
               <div className="mt-4 space-y-2">
-                {activePlanTasks.map((task) => (
-                  <div key={task.id} className={`flex flex-col items-stretch gap-2 rounded-lg border border-slate-200 p-2 sm:flex-row sm:items-center ${task.completed ? 'opacity-60' : ''}`}>
-                    <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
-                    <div className="w-full min-w-0 space-y-1">
-                      {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
-                      <input
-                        value={task.text}
-                        onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
-                        disabled={Boolean(task.isRecurring)}
-                        className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
-                      />
-                      {task.comment ? <p className="text-xs text-slate-500 line-clamp-2">{task.comment}</p> : null}
-                      {!task.isRecurring ? (
-                        <div>
-                          <button type="button" onClick={() => setOpenTaskCommentEditors((prev) => ({ ...prev, [task.id]: !prev[task.id] }))} className="text-xs text-indigo-600">
-                            {task.comment ? 'Edit comment' : 'Add comment'}
-                          </button>
-                          {openTaskCommentEditors[task.id] ? (
-                            <div className="mt-1 space-y-1">
-                              <textarea
-                                value={typeof task.comment === 'string' ? task.comment : ''}
-                                onChange={(e) => updatePlanTask(task.id, { comment: e.target.value })}
-                                className="w-full rounded border border-slate-300 p-2 text-sm"
-                                rows={2}
-                                placeholder="Add task comment"
-                              />
-                              <button type="button" onClick={() => updatePlanTask(task.id, { comment: '' })} className="text-xs text-rose-600">Clear comment</button>
-                            </div>
-                          ) : null}
+                {activePlanTasks.map((task) => {
+                  const manualIndex = task.isRecurring ? -1 : activeManualPlanTasks.findIndex((manualTask) => manualTask.id === task.id)
+                  const canMoveUp = manualIndex > 0
+                  const canMoveDown = manualIndex >= 0 && manualIndex < activeManualPlanTasks.length - 1
+
+                  return (
+                    <div key={task.id} className={`flex flex-col items-stretch gap-2 rounded-lg border border-slate-200 p-2 sm:flex-row sm:items-center ${task.completed ? 'opacity-60' : ''}`}>
+                      <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
+                      <div className="w-full min-w-0 space-y-1">
+                        {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
+                        <input
+                          value={task.text}
+                          onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
+                          disabled={Boolean(task.isRecurring)}
+                          className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
+                        />
+                        {task.comment ? <p className="text-xs text-slate-500 line-clamp-2">{task.comment}</p> : null}
+                        {!task.isRecurring ? (
+                          <div>
+                            <button type="button" onClick={() => setOpenTaskCommentEditors((prev) => ({ ...prev, [task.id]: !prev[task.id] }))} className="text-xs text-indigo-600">
+                              {task.comment ? 'Edit comment' : 'Add comment'}
+                            </button>
+                            {openTaskCommentEditors[task.id] ? (
+                              <div className="mt-1 space-y-1">
+                                <textarea
+                                  value={typeof task.comment === 'string' ? task.comment : ''}
+                                  onChange={(e) => updatePlanTask(task.id, { comment: e.target.value })}
+                                  className="w-full rounded border border-slate-300 p-2 text-sm"
+                                  rows={2}
+                                  placeholder="Add task comment"
+                                />
+                                <button type="button" onClick={() => updatePlanTask(task.id, { comment: '' })} className="text-xs text-rose-600">Clear comment</button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
+                          <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
+                          <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
+                          <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[80px] sm:w-[90px] rounded border border-slate-300 p-1 text-sm" />
                         </div>
-                      ) : null}
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
-                        <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
-                        <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
-                        <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[80px] sm:w-[90px] rounded border border-slate-300 p-1 text-sm" />
+                      </div>
+                      <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
+                      <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-col">
+                        {!task.isRecurring ? (
+                          <>
+                            <button type="button" onClick={() => movePlanTask(task.id, -1)} disabled={!canMoveUp} className="flex-1 rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-40 sm:flex-none">↑ Up</button>
+                            <button type="button" onClick={() => movePlanTask(task.id, 1)} disabled={!canMoveDown} className="flex-1 rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-40 sm:flex-none">↓ Down</button>
+                          </>
+                        ) : null}
+                        <button onClick={() => deletePlanTask(task.id)} disabled={Boolean(task.isRecurring)} className="flex-1 rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50 sm:flex-none">Delete</button>
                       </div>
                     </div>
-                    <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
-                    <button onClick={() => deletePlanTask(task.id)} disabled={Boolean(task.isRecurring)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50">Delete</button>
-                  </div>
-                ))}
+                  )
+                })}
                 {activePlanTasks.length === 0 && <p className="text-sm text-slate-500">No tasks planned yet.</p>}
               </div>
 
