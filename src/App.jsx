@@ -8,6 +8,15 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null
 
 const DEFAULT_TASK_CATEGORIES = ['Work', 'Health', 'Personal', 'Learning', 'Admin', 'Other']
+const DEFAULT_TASK_CATEGORY_COLORS = {
+  Work: '#dbeafe',
+  Health: '#dcfce7',
+  Personal: '#fef3c7',
+  Learning: '#ede9fe',
+  Admin: '#f3f4f6',
+  Other: '#e5e7eb',
+}
+const FALLBACK_CATEGORY_COLOR = '#e5e7eb'
 const TIME_BLOCKS = ['Anytime', '06:00 to 08:00', '08:00 to 10:00', '10:00 to 12:00', '12:00 to 14:00', '14:00 to 16:00', '16:00 to 18:00', '18:00 to 20:00', '20:00 to 22:00', '22:00 to 00:00']
 
 const XP_RULES = {
@@ -27,6 +36,7 @@ const defaultState = {
   recurringTaskCompletions: {},
   rewards: [],
   taskCategories: DEFAULT_TASK_CATEGORIES,
+  taskCategoryColors: DEFAULT_TASK_CATEGORY_COLORS,
   entryBlocks: getDefaultEntryBlocks(),
 }
 
@@ -137,6 +147,26 @@ function safeText(value, fallback = 'Not provided') {
 function safeScore(value) {
   const num = Number(value)
   return Number.isFinite(num) ? num : 'Not provided'
+}
+
+function normalizeHexColor(value, fallback = FALLBACK_CATEGORY_COLOR) {
+  if (typeof value !== 'string') return fallback
+  const trimmed = value.trim()
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toLowerCase() : fallback
+}
+
+function normalizeTaskCategoryColors(rawColors, categories = DEFAULT_TASK_CATEGORIES) {
+  const source = rawColors && typeof rawColors === 'object' ? rawColors : {}
+  return Object.fromEntries(
+    categories.map((category) => [
+      category,
+      normalizeHexColor(source[category] || DEFAULT_TASK_CATEGORY_COLORS[category], DEFAULT_TASK_CATEGORY_COLORS[category] || FALLBACK_CATEGORY_COLOR),
+    ]),
+  )
+}
+
+function categoryColorFor(category, colors = {}) {
+  return normalizeHexColor(colors?.[category] || colors?.Other || DEFAULT_TASK_CATEGORY_COLORS.Other, FALLBACK_CATEGORY_COLOR)
 }
 
 function taskXpValue(task) {
@@ -267,6 +297,7 @@ function normalizeAppData(parsed) {
     ? Array.from(new Set(parsed.taskCategories.filter((c) => typeof c === 'string' && c.trim()).map((c) => c.trim())))
     : DEFAULT_TASK_CATEGORIES
   const finalTaskCategories = normalizedTaskCategories.length ? (normalizedTaskCategories.includes('Other') ? normalizedTaskCategories : [...normalizedTaskCategories, 'Other']) : DEFAULT_TASK_CATEGORIES
+  const normalizedTaskCategoryColors = normalizeTaskCategoryColors(parsed?.taskCategoryColors, finalTaskCategories)
 
   const normalizedRewards = Array.isArray(parsed?.rewards)
     ? parsed.rewards.map(normalizeReward).filter(Boolean)
@@ -303,6 +334,7 @@ function normalizeAppData(parsed) {
     recurringTasks: normalizedRecurringTasks,
     recurringTaskCompletions: normalizedRecurringTaskCompletions,
     taskCategories: finalTaskCategories,
+    taskCategoryColors: normalizedTaskCategoryColors,
     entryBlocks: normalizedEntryBlocks,
   }
 }
@@ -505,6 +537,7 @@ function App() {
   const activePlanTasks = [...activeManualPlanTasks, ...activeRecurringPlanTasks]
   const completedPlanTasks = allTasksForSelectedDate.filter((task) => task.completed)
   const categoryOptions = (Array.isArray(data.taskCategories) && data.taskCategories.length ? data.taskCategories : DEFAULT_TASK_CATEGORIES)
+  const taskCategoryColors = normalizeTaskCategoryColors(data.taskCategoryColors, categoryOptions)
 
   const addPlanTask = () => {
     if (!planTaskInput.trim()) return
@@ -600,7 +633,14 @@ function App() {
     const next = (newCategoryInput || '').trim()
     if (!next) return
     if (categoryOptions.includes(next)) return
-    updateData({ ...data, taskCategories: [...categoryOptions, next] })
+    updateData({
+      ...data,
+      taskCategories: [...categoryOptions, next],
+      taskCategoryColors: {
+        ...taskCategoryColors,
+        [next]: DEFAULT_TASK_CATEGORY_COLORS[next] || FALLBACK_CATEGORY_COLOR,
+      },
+    })
     setNewCategoryInput('')
   }
 
@@ -608,20 +648,38 @@ function App() {
     const next = (newName || '').trim()
     if (!next || oldName === 'Other') return
     const updatedCats = categoryOptions.map((c) => (c === oldName ? next : c))
+    const nextColors = { ...taskCategoryColors }
+    nextColors[next] = nextColors[oldName] || DEFAULT_TASK_CATEGORY_COLORS[next] || FALLBACK_CATEGORY_COLOR
+    if (oldName !== next) delete nextColors[oldName]
     updateData({
       ...data,
       taskCategories: Array.from(new Set(updatedCats)),
+      taskCategoryColors: normalizeTaskCategoryColors(nextColors, Array.from(new Set(updatedCats))),
       dailyPlans: Object.fromEntries(Object.entries(data.dailyPlans || {}).map(([date, tasks]) => [date, (tasks || []).map((t) => ({ ...t, category: t.category === oldName ? next : t.category }))])),
+      recurringTasks: (data.recurringTasks || []).map((task) => ({ ...task, category: task.category === oldName ? next : task.category })),
     })
   }
 
   const deleteTaskCategory = (name) => {
     if (categoryOptions.length <= 1 || name === 'Other') return
     const updatedCats = categoryOptions.filter((c) => c !== name)
+    const finalCats = updatedCats.includes('Other') ? updatedCats : [...updatedCats, 'Other']
+    const nextColors = { ...taskCategoryColors }
+    delete nextColors[name]
     updateData({
       ...data,
-      taskCategories: updatedCats.includes('Other') ? updatedCats : [...updatedCats, 'Other'],
+      taskCategories: finalCats,
+      taskCategoryColors: normalizeTaskCategoryColors(nextColors, finalCats),
       dailyPlans: Object.fromEntries(Object.entries(data.dailyPlans || {}).map(([date, tasks]) => [date, (tasks || []).map((t) => ({ ...t, category: t.category === name ? 'Other' : t.category }))])),
+      recurringTasks: (data.recurringTasks || []).map((task) => ({ ...task, category: task.category === name ? 'Other' : task.category })),
+    })
+  }
+
+  const updateTaskCategoryColor = (category, color) => {
+    const safeColor = normalizeHexColor(color, taskCategoryColors[category] || FALLBACK_CATEGORY_COLOR)
+    updateData({
+      ...data,
+      taskCategoryColors: normalizeTaskCategoryColors({ ...taskCategoryColors, [category]: safeColor }, categoryOptions),
     })
   }
 
@@ -1440,12 +1498,20 @@ function App() {
                   const manualIndex = task.isRecurring ? -1 : activeManualPlanTasks.findIndex((manualTask) => manualTask.id === task.id)
                   const canMoveUp = manualIndex > 0
                   const canMoveDown = manualIndex >= 0 && manualIndex < activeManualPlanTasks.length - 1
+                  const taskCategoryColor = categoryColorFor(categoryOptions.includes(task.category) ? task.category : 'Other', taskCategoryColors)
 
                   return (
-                    <div key={task.id} className={`flex flex-col items-stretch gap-2 rounded-lg border border-slate-200 p-2 sm:flex-row sm:items-center ${task.completed ? 'opacity-60' : ''}`}>
+                    <div
+                      key={task.id}
+                      className={`flex flex-col items-stretch gap-2 rounded-lg border border-l-4 border-slate-200 p-2 sm:flex-row sm:items-center ${task.completed ? 'opacity-60' : ''}`}
+                      style={{ backgroundColor: taskCategoryColor, borderLeftColor: taskCategoryColor }}
+                    >
                       <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
                       <div className="w-full min-w-0 space-y-1">
-                        {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
+                        <div className="flex flex-wrap gap-1">
+                          <span className="inline-block rounded border border-white/70 bg-white/70 px-2 py-0.5 text-xs font-semibold text-slate-700">{categoryOptions.includes(task.category) ? task.category : 'Other'}</span>
+                          {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
+                        </div>
                         <input
                           value={task.text}
                           onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
@@ -1506,11 +1572,21 @@ function App() {
 
                 {showCompletedTasks && (
                   <div className="mt-3 space-y-2">
-                    {completedPlanTasks.map((task) => (
-                      <div key={task.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 opacity-70">
-                        <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
-                        <div className="w-full min-w-0 space-y-1">
-                          {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
+                    {completedPlanTasks.map((task) => {
+                      const taskCategoryColor = categoryColorFor(categoryOptions.includes(task.category) ? task.category : 'Other', taskCategoryColors)
+
+                      return (
+                        <div
+                          key={task.id}
+                          className="flex items-center gap-2 rounded-lg border border-l-4 border-slate-200 p-2 opacity-70"
+                          style={{ backgroundColor: taskCategoryColor, borderLeftColor: taskCategoryColor }}
+                        >
+                          <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
+                          <div className="w-full min-w-0 space-y-1">
+                            <div className="flex flex-wrap gap-1">
+                              <span className="inline-block rounded border border-white/70 bg-white/70 px-2 py-0.5 text-xs font-semibold text-slate-700">{categoryOptions.includes(task.category) ? task.category : 'Other'}</span>
+                              {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
+                            </div>
                           <input
                             value={task.text}
                             onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
@@ -1544,9 +1620,10 @@ function App() {
                           </div>
                         </div>
                         <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
-                        <button onClick={() => deletePlanTask(task.id)} disabled={Boolean(task.isRecurring)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50">Delete</button>
-                      </div>
-                    ))}
+                          <button onClick={() => deletePlanTask(task.id)} disabled={Boolean(task.isRecurring)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50">Delete</button>
+                        </div>
+                      )
+                    })}
                     {completedPlanTasks.length === 0 && <p className="text-sm text-slate-500">No completed tasks yet.</p>}
                   </div>
                 )}
@@ -1790,7 +1867,16 @@ function App() {
                 </div>
                 <div className="mt-2 space-y-1">
                   {categoryOptions.map((category) => (
-                    <CategoryRow key={category} category={category} canDelete={categoryOptions.length > 1 && category !== 'Other'} onRename={renameTaskCategory} onDelete={deleteTaskCategory} compact />
+                    <CategoryRow
+                      key={category}
+                      category={category}
+                      color={categoryColorFor(category, taskCategoryColors)}
+                      canDelete={categoryOptions.length > 1 && category !== 'Other'}
+                      onRename={renameTaskCategory}
+                      onDelete={deleteTaskCategory}
+                      onColorChange={updateTaskCategoryColor}
+                      compact
+                    />
                   ))}
                 </div>
               </div>
@@ -2127,14 +2213,30 @@ function RewardGroup({ title, rewards, level, data, getRewardStatus, isRewardUnl
 }
 
 
-function CategoryRow({ category, canDelete, onRename, onDelete, compact = false }) {
+function CategoryRow({ category, color, canDelete, onRename, onDelete, onColorChange, compact = false }) {
   return (
-    <div className={`flex items-center gap-2 ${compact ? 'text-xs' : 'text-sm'}`}>
+    <div className={`grid grid-cols-1 items-center gap-2 rounded border border-slate-200 bg-white p-2 sm:grid-cols-[1fr_auto_110px_auto] ${compact ? 'text-xs' : 'text-sm'}`}>
       <input
         value={category}
         onChange={(e) => onRename(category, e.target.value)}
         disabled={category === 'Other'}
         className={`w-full rounded border border-slate-300 ${compact ? 'p-1 text-xs' : 'p-1'} disabled:bg-slate-100`}
+      />
+      <div className="flex items-center gap-2">
+        <span className="h-6 w-8 rounded border border-slate-300" style={{ backgroundColor: color }} aria-label={`${category} color preview`} />
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => onColorChange(category, e.target.value)}
+          className="h-8 w-10 cursor-pointer rounded border border-slate-300 bg-white p-0.5"
+          aria-label={`${category} color`}
+        />
+      </div>
+      <input
+        value={color}
+        onChange={(e) => onColorChange(category, e.target.value)}
+        className={`rounded border border-slate-300 font-mono ${compact ? 'p-1 text-xs' : 'p-1 text-sm'}`}
+        aria-label={`${category} hex color`}
       />
       <button
         onClick={() => onDelete(category)}
