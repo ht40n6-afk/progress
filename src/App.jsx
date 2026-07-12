@@ -18,6 +18,7 @@ const DEFAULT_TASK_CATEGORY_COLORS = {
 }
 const FALLBACK_CATEGORY_COLOR = '#e5e7eb'
 const TIME_BLOCKS = ['Anytime', '06:00 to 08:00', '08:00 to 10:00', '10:00 to 12:00', '12:00 to 14:00', '14:00 to 16:00', '16:00 to 18:00', '18:00 to 20:00', '20:00 to 22:00', '22:00 to 00:00']
+const REMINDER_OFFSET_OPTIONS = [0, 5, 15, 30, 60]
 
 const XP_RULES = {
   achievement: 10,
@@ -169,6 +170,19 @@ function categoryColorFor(category, colors = {}) {
   return normalizeHexColor(colors?.[category] || colors?.Other || DEFAULT_TASK_CATEGORY_COLORS.Other, FALLBACK_CATEGORY_COLOR)
 }
 
+function normalizeDueTime(value) {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : ''
+}
+
+function normalizeReminderOffsets(value) {
+  if (!Array.isArray(value)) return []
+  return Array.from(new Set(value.map(Number).filter((offset) => REMINDER_OFFSET_OPTIONS.includes(offset)))).sort((a, b) => b - a)
+}
+
+function reminderLabel(offset) {
+  return offset === 0 ? 'At time' : `${offset} min before`
+}
+
 function taskXpValue(task) {
   return Number(task?.xp) >= 0 ? Number(task.xp) : 10
 }
@@ -285,6 +299,9 @@ function normalizeAppData(parsed) {
             category: task?.category && typeof task.category === 'string' ? task.category : 'Other',
             xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
             timeBlock: TIME_BLOCKS.includes(task?.timeBlock) ? task.timeBlock : 'Anytime',
+            dueTime: normalizeDueTime(task?.dueTime),
+            reminderEnabled: Boolean(task?.reminderEnabled),
+            reminderOffsets: normalizeReminderOffsets(task?.reminderOffsets),
             order: Number.isFinite(Number(task?.order)) ? Number(task.order) : index,
             comment: typeof task?.comment === 'string' ? task.comment : '',
             createdAt: task?.createdAt || new Date().toISOString(),
@@ -310,6 +327,9 @@ function normalizeAppData(parsed) {
         category: task?.category && typeof task.category === 'string' ? task.category : 'Other',
         xp: Number(task?.xp) >= 0 ? Number(task.xp) : 10,
         timeBlock: TIME_BLOCKS.includes(task?.timeBlock) ? task.timeBlock : 'Anytime',
+        dueTime: normalizeDueTime(task?.dueTime),
+        reminderEnabled: Boolean(task?.reminderEnabled),
+        reminderOffsets: normalizeReminderOffsets(task?.reminderOffsets),
         recurrenceType: task?.recurrenceType === 'weekdays' || task?.recurrenceType === 'weekly' ? task.recurrenceType : 'daily',
         daysOfWeek: Array.isArray(task?.daysOfWeek) ? task.daysOfWeek.filter((day) => WEEKDAY_NAMES.includes(day)) : [],
         active: task?.active !== false,
@@ -457,6 +477,37 @@ function createEmptyGoal() {
   }
 }
 
+function ReminderControls({ task, onUpdate, disabled = false }) {
+  const offsets = normalizeReminderOffsets(task.reminderOffsets)
+  const enabled = Boolean(task.reminderEnabled)
+  const toggleOffset = (offset) => onUpdate({ reminderOffsets: offsets.includes(offset) ? offsets.filter((item) => item !== offset) : [...offsets, offset] })
+
+  return (
+    <div className={`rounded-md border border-white/70 bg-white/60 p-2 ${enabled ? '' : 'opacity-70'}`}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <label className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-700">
+          Due time
+          <input type="time" value={normalizeDueTime(task.dueTime)} onChange={(e) => onUpdate({ dueTime: e.target.value })} disabled={disabled} className="min-w-0 rounded border border-slate-300 bg-white px-2 py-1 text-sm disabled:bg-slate-100" />
+        </label>
+        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+          <input type="checkbox" checked={enabled} onChange={(e) => onUpdate({ reminderEnabled: e.target.checked })} disabled={disabled} />
+          Reminders
+        </label>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {REMINDER_OFFSET_OPTIONS.map((offset) => (
+          <label key={offset} className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+            <input type="checkbox" checked={offsets.includes(offset)} onChange={() => toggleOffset(offset)} disabled={disabled} />
+            {reminderLabel(offset)}
+          </label>
+        ))}
+      </div>
+      {enabled && !normalizeDueTime(task.dueTime) ? <p className="mt-1 text-xs font-medium text-amber-700">Choose due time for reminders.</p> : null}
+      {disabled ? <p className="mt-1 text-xs text-slate-500">Edit reminder settings in the recurring task template.</p> : null}
+    </div>
+  )
+}
+
 function App() {
   const [data, setData] = useState(loadData)
   const [activePage, setActivePage] = useState('dashboard')
@@ -511,8 +562,11 @@ function App() {
   const [autoSyncStatus, setAutoSyncStatus] = useState('Idle')
   const [cloudNewerPrompt, setCloudNewerPrompt] = useState(null)
   const [openTaskCommentEditors, setOpenTaskCommentEditors] = useState({})
-  const [recurringTaskDraft, setRecurringTaskDraft] = useState({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
+  const emptyRecurringTaskDraft = () => ({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', dueTime: '', reminderEnabled: false, reminderOffsets: [], recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
+  const [recurringTaskDraft, setRecurringTaskDraft] = useState(emptyRecurringTaskDraft)
   const [editingRecurringTaskId, setEditingRecurringTaskId] = useState(null)
+  const notificationSupported = typeof window !== 'undefined' && 'Notification' in window
+  const [notificationPermission, setNotificationPermission] = useState(() => notificationSupported ? window.Notification.permission : 'unsupported')
 
 
   const todayEntry = data.entries[selectedDate] || createEmptyEntry(selectedDate)
@@ -548,6 +602,9 @@ function App() {
       category: categoryOptions.includes(planCategoryInput) ? planCategoryInput : 'Other',
       xp: Number(planXpInput) >= 0 ? Number(planXpInput) : 10,
       timeBlock: TIME_BLOCKS.includes(planTimeBlockInput) ? planTimeBlockInput : 'Anytime',
+      dueTime: '',
+      reminderEnabled: false,
+      reminderOffsets: [],
       order: planForSelectedDate.length ? Math.max(...planForSelectedDate.map((task, index) => manualOrderValue(task, index))) + 1 : 0,
       comment: '',
       createdAt: new Date().toISOString(),
@@ -574,6 +631,12 @@ function App() {
         ),
       },
     })
+  }
+
+  const requestNotificationPermission = async () => {
+    if (!notificationSupported) return
+    const permission = await window.Notification.requestPermission()
+    setNotificationPermission(permission)
   }
 
   const movePlanTask = (taskId, direction) => {
@@ -1304,6 +1367,9 @@ function App() {
       category: categoryOptions.includes(recurringTaskDraft.category) ? recurringTaskDraft.category : 'Other',
       xp: Number(recurringTaskDraft.xp) >= 0 ? Number(recurringTaskDraft.xp) : 10,
       timeBlock: TIME_BLOCKS.includes(recurringTaskDraft.timeBlock) ? recurringTaskDraft.timeBlock : 'Anytime',
+      dueTime: normalizeDueTime(recurringTaskDraft.dueTime),
+      reminderEnabled: Boolean(recurringTaskDraft.reminderEnabled),
+      reminderOffsets: normalizeReminderOffsets(recurringTaskDraft.reminderOffsets),
       recurrenceType: recurringTaskDraft.recurrenceType === 'weekdays' || recurringTaskDraft.recurrenceType === 'weekly' ? recurringTaskDraft.recurrenceType : 'daily',
       daysOfWeek: recurringTaskDraft.recurrenceType === 'weekly' ? recurringTaskDraft.daysOfWeek.filter((d) => WEEKDAY_NAMES.includes(d)) : [],
       active: recurringTaskDraft.active !== false,
@@ -1314,7 +1380,7 @@ function App() {
       ? existing.map((task) => (task.id === editingRecurringTaskId ? { ...task, ...normalized, createdAt: task.createdAt } : task))
       : [...existing, normalized]
     updateData({ ...data, recurringTasks: nextRecurringTasks })
-    setRecurringTaskDraft({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
+    setRecurringTaskDraft(emptyRecurringTaskDraft())
     setEditingRecurringTaskId(null)
   }
 
@@ -1543,6 +1609,11 @@ function App() {
                           <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
                           <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[80px] sm:w-[90px] rounded border border-slate-300 p-1 text-sm" />
                         </div>
+                        <ReminderControls
+                          task={task}
+                          disabled={Boolean(task.isRecurring)}
+                          onUpdate={(updates) => updatePlanTask(task.id, updates)}
+                        />
                       </div>
                       <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
                       <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-col">
@@ -1845,6 +1916,16 @@ function App() {
             </section>
 
             <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Notifications</h2>
+              <p className="mt-1 text-sm text-slate-600">Check browser notification availability. Task reminders are not scheduled yet.</p>
+              <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p>Support: <span className="font-semibold">{notificationSupported ? 'Supported' : 'Not supported'}</span></p>
+                <p>Permission: <span className="font-semibold capitalize">{notificationPermission}</span></p>
+                <button type="button" onClick={requestNotificationPermission} disabled={!notificationSupported || notificationPermission === 'granted'} className="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Request notification permission</button>
+              </div>
+            </section>
+
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Backup and Restore</h2>
               <p className="mt-1 text-sm text-slate-600">Export your current data to JSON and import a previous backup.</p>
               <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
@@ -1918,6 +1999,7 @@ function App() {
                   <input type="number" min="0" value={recurringTaskDraft.xp} onChange={(e) => setRecurringTaskDraft({ ...recurringTaskDraft, xp: e.target.value })} className="rounded border border-slate-300 p-2" placeholder="XP" />
                   <select value={recurringTaskDraft.recurrenceType} onChange={(e) => setRecurringTaskDraft({ ...recurringTaskDraft, recurrenceType: e.target.value })} className="rounded border border-slate-300 p-2"><option value="daily">Daily</option><option value="weekdays">Weekdays</option><option value="weekly">Weekly (selected days)</option></select>
                 </div>
+                <ReminderControls task={recurringTaskDraft} onUpdate={(updates) => setRecurringTaskDraft({ ...recurringTaskDraft, ...updates })} />
                 {recurringTaskDraft.recurrenceType === 'weekly' && (
                   <div className="flex flex-wrap gap-2">
                     {WEEKDAY_NAMES.map((day) => (
@@ -1944,6 +2026,7 @@ function App() {
                       </div>
                     </div>
                     <p className="mt-1 text-xs text-slate-600">{task.category} · {task.timeBlock} · {taskXpValue(task)} XP {task.recurrenceType === 'weekly' ? `· ${task.daysOfWeek.join(', ')}` : ''}</p>
+                    <p className="mt-1 text-xs text-slate-500">Due: {task.dueTime || 'not set'} · Reminders: {task.reminderEnabled ? (normalizeReminderOffsets(task.reminderOffsets).map(reminderLabel).join(', ') || 'enabled, no offsets') : 'off'}</p>
                   </div>
                 ))}
               </div>
