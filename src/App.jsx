@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const STORAGE_KEY = 'life-gamification-tracker-v1'
 const SYNC_META_KEY = 'life-gamification-tracker-sync-meta-v1'
+const SENT_REMINDERS_KEY = 'life-gamification-tracker-sent-reminders-v1'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null
@@ -19,6 +20,8 @@ const DEFAULT_TASK_CATEGORY_COLORS = {
 const FALLBACK_CATEGORY_COLOR = '#e5e7eb'
 const TIME_BLOCKS = ['Anytime', '06:00 to 08:00', '08:00 to 10:00', '10:00 to 12:00', '12:00 to 14:00', '14:00 to 16:00', '16:00 to 18:00', '18:00 to 20:00', '20:00 to 22:00', '22:00 to 00:00']
 const REMINDER_OFFSET_OPTIONS = [0, 5, 15, 30, 60]
+const REMINDER_CHECK_INTERVAL_MS = 30_000
+const REMINDER_GRACE_PERIOD_MS = 90_000
 
 const XP_RULES = {
   achievement: 10,
@@ -905,6 +908,75 @@ function App() {
   }, [localLastModifiedAt, lastCloudSavedAt, lastCloudLoadedAt, cloudRecordUpdatedAt])
 
   useEffect(() => {
+    if (!notificationSupported || notificationPermission !== 'granted') return undefined
+
+    const checkTaskReminders = () => {
+      if (window.Notification.permission !== 'granted') {
+        setNotificationPermission(window.Notification.permission)
+        return
+      }
+
+      const now = new Date()
+      const currentDate = todayString()
+      const candidates = []
+      const manualDates = Array.from(new Set([currentDate, selectedDate]))
+
+      manualDates.forEach((date) => {
+        const tasks = Array.isArray(data.dailyPlans?.[date]) ? data.dailyPlans[date] : []
+        tasks.forEach((task) => candidates.push({ task, date }))
+      })
+      getRecurringTasksForDate(currentDate, data).forEach((task) => candidates.push({ task, date: currentDate }))
+
+      let sentReminders = {}
+      try {
+        const saved = JSON.parse(localStorage.getItem(SENT_REMINDERS_KEY) || '{}')
+        if (saved && typeof saved === 'object' && !Array.isArray(saved)) sentReminders = saved
+      } catch {}
+
+      const retentionCutoff = now.getTime() - (14 * 24 * 60 * 60 * 1000)
+      sentReminders = Object.fromEntries(Object.entries(sentReminders).filter(([, sentAt]) => Number(sentAt) >= retentionCutoff))
+      let changed = false
+
+      candidates.forEach(({ task, date }) => {
+        if (task.completed || !task.reminderEnabled) return
+        const dueTime = normalizeDueTime(task.dueTime)
+        const offsets = normalizeReminderOffsets(task.reminderOffsets)
+        if (!dueTime || !offsets.length) return
+
+        const dueAt = new Date(`${date}T${dueTime}:00`)
+        if (Number.isNaN(dueAt.getTime())) return
+
+        offsets.forEach((offset) => {
+          const reminderAt = dueAt.getTime() - (offset * 60 * 1000)
+          const age = now.getTime() - reminderAt
+          if (age < 0 || age > REMINDER_GRACE_PERIOD_MS) return
+
+          // dueTime is part of the key so an edited task gets a fresh schedule.
+          const reminderId = `${date}:${task.isRecurring ? 'recurring' : 'manual'}:${task.id}:${dueTime}:${offset}`
+          if (sentReminders[reminderId]) return
+
+          const categoryPrefix = typeof task.category === 'string' && task.category.trim() ? `${task.category.trim()}: ` : ''
+          const body = offset === 0
+            ? `${categoryPrefix}${task.text} is due at ${dueTime}.`
+            : `${categoryPrefix}${task.text} is due in ${offset} minutes.`
+
+          try {
+            new window.Notification('Task reminder', { body, tag: reminderId })
+            sentReminders[reminderId] = now.getTime()
+            changed = true
+          } catch {}
+        })
+      })
+
+      if (changed) localStorage.setItem(SENT_REMINDERS_KEY, JSON.stringify(sentReminders))
+    }
+
+    checkTaskReminders()
+    const intervalId = window.setInterval(checkTaskReminders, REMINDER_CHECK_INTERVAL_MS)
+    return () => window.clearInterval(intervalId)
+  }, [data, selectedDate, notificationSupported, notificationPermission])
+
+  useEffect(() => {
     if (!authUser || !supabaseEnabled) return
     const checkCloud = async () => {
       const { data: rows, error } = await supabase.from('user_app_data').select('data,updated_at').eq('user_id', authUser.id).limit(1)
@@ -1423,6 +1495,7 @@ function App() {
     const confirmReset = window.confirm('This will permanently clear all app data from this device. Continue?')
     if (!confirmReset) return
     localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(SENT_REMINDERS_KEY)
     const fresh = loadData()
     setData(fresh)
     setActivePage('dashboard')
@@ -1921,6 +1994,7 @@ function App() {
               <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                 <p>Support: <span className="font-semibold">{notificationSupported ? 'Supported' : 'Not supported'}</span></p>
                 <p>Permission: <span className="font-semibold capitalize">{notificationPermission}</span></p>
+                <p>Reminder engine: <span className="font-semibold">{!notificationSupported ? 'Not supported in this browser' : notificationPermission === 'granted' ? 'Active while app is open' : 'Not active because permission is not granted'}</span></p>
                 <button type="button" onClick={requestNotificationPermission} disabled={!notificationSupported || notificationPermission === 'granted'} className="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Request notification permission</button>
               </div>
             </section>
