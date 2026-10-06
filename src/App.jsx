@@ -9,6 +9,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null
 
 const DEFAULT_TASK_CATEGORIES = ['Work', 'Health', 'Personal', 'Learning', 'Admin', 'Other']
+const GOAL_TIME_HORIZONS = ['This month', 'This quarter', 'This year', 'Someday']
 const DEFAULT_TASK_CATEGORY_COLORS = {
   Work: '#dbeafe',
   Health: '#dcfce7',
@@ -233,11 +234,19 @@ function safeId() {
   return `goal-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+function normalizeGoalTargetDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return ''
+  const date = new Date(`${value}T12:00:00Z`)
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : ''
+}
+
 function normalizeGoal(rawGoal) {
   if (typeof rawGoal === 'string') {
     return {
       id: safeId(),
       name: rawGoal,
+      timeHorizon: 'Someday',
+      targetDate: '',
       category: 'General',
       description: '',
       currentProgress: 0,
@@ -252,6 +261,8 @@ function normalizeGoal(rawGoal) {
   return {
     id: rawGoal.id || safeId(),
     name: rawGoal.name || 'Untitled goal',
+    timeHorizon: GOAL_TIME_HORIZONS.includes(rawGoal.timeHorizon) ? rawGoal.timeHorizon : 'Someday',
+    targetDate: normalizeGoalTargetDate(rawGoal.targetDate),
     category: rawGoal.category || 'General',
     description: rawGoal.description || '',
     currentProgress: Number(rawGoal.currentProgress ?? rawGoal.progress) || 0,
@@ -471,6 +482,8 @@ function createEmptyGoal() {
   return {
     id: safeId(),
     name: '',
+    timeHorizon: 'Someday',
+    targetDate: '',
     category: '',
     description: '',
     currentProgress: 0,
@@ -478,6 +491,29 @@ function createEmptyGoal() {
     status: 'Not started',
     completedAt: null,
   }
+}
+
+function GoalTimingFields({ goal, onChange }) {
+  return (
+    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+      <label className="min-w-0 text-sm text-slate-600">
+        Time horizon
+        <select value={goal.timeHorizon || 'Someday'} onChange={(e) => onChange({ timeHorizon: e.target.value })} className="mt-1 w-full min-w-0 rounded border border-slate-300 bg-white p-2">
+          {GOAL_TIME_HORIZONS.map((horizon) => <option key={horizon}>{horizon}</option>)}
+        </select>
+      </label>
+      <label className="min-w-0 text-sm text-slate-600">
+        Target date (optional)
+        <input type="date" value={goal.targetDate || ''} onChange={(e) => onChange({ targetDate: e.target.value })} className="mt-1 w-full min-w-0 rounded border border-slate-300 bg-white p-2" />
+      </label>
+      <p className="text-xs text-slate-500 sm:col-span-2">Leave the date empty for an open-ended goal. Choosing a horizon does not set a deadline.</p>
+    </div>
+  )
+}
+
+function GoalTimingSummary({ goal }) {
+  const targetDate = normalizeGoalTargetDate(goal.targetDate)
+  return <p className="mt-1 text-xs text-slate-500">{goal.timeHorizon || 'Someday'}{targetDate ? ` · Target: ${new Date(`${targetDate}T12:00:00`).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}` : ' · No target date'}</p>
 }
 
 function ReminderControls({ task, onUpdate, disabled = false }) {
@@ -1095,7 +1131,7 @@ function App() {
     if (!goalDraft.name.trim()) return
     if (goalDraft.targetProgress <= 0) return
 
-    const normalizedDraft = { ...goalDraft, completedAt: goalDraft.status === 'Completed' ? (goalDraft.completedAt || selectedDate) : null }
+    const normalizedDraft = { ...goalDraft, timeHorizon: GOAL_TIME_HORIZONS.includes(goalDraft.timeHorizon) ? goalDraft.timeHorizon : 'Someday', targetDate: normalizeGoalTargetDate(goalDraft.targetDate), completedAt: goalDraft.status === 'Completed' ? (goalDraft.completedAt || selectedDate) : null }
 
     const nextGoals = isEditingGoal
       ? data.goals.map((goal) => (goal.id === normalizedDraft.id ? normalizedDraft : goal))
@@ -1781,6 +1817,7 @@ function App() {
               <div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4">
                 <h3 className="font-semibold">{isEditingGoal ? 'Edit Goal' : 'Create Goal'}</h3>
                 <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Name" value={goalDraft.name} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} />
+                <GoalTimingFields goal={goalDraft} onChange={(updates) => setGoalDraft({ ...goalDraft, ...updates })} />
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.currentProgress} onChange={(e) => setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) })} />
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.targetProgress} onChange={(e) => setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) })} />
@@ -1811,6 +1848,7 @@ function App() {
                             <p className="font-semibold">{goal.name}</p>
                           )}
                           <p className="text-slate-600">{goal.currentProgress}/{goal.targetProgress} • {goal.status}</p>
+                          <GoalTimingSummary goal={goal} />
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {isEditing ? (
@@ -1827,6 +1865,7 @@ function App() {
                         </div>
                       </div>
                       <ProgressBar percent={percent} />
+                      {isEditing ? <GoalTimingFields goal={goalDraft} onChange={(updates) => setGoalDraft({ ...goalDraft, ...updates })} /> : null}
                       <div className="mt-2 grid grid-cols-3 gap-2">
                         <input type="number" className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.currentProgress : goal.currentProgress} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, currentProgress: Number(e.target.value) } : g) })} />
                         <input type="number" className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.targetProgress : goal.targetProgress} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, targetProgress: Number(e.target.value) } : g) })} />
@@ -1847,6 +1886,7 @@ function App() {
                   <div key={goal.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                     <p className="font-semibold">{goal.name}</p>
                     <p className="text-slate-600">{goal.currentProgress}/{goal.targetProgress} • {goal.status}</p>
+                    <GoalTimingSummary goal={goal} />
                     <p className="text-slate-500">Completed: {goal.completedAt || 'Unknown'}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button onClick={() => restoreGoal(goal.id)} className="rounded bg-slate-200 px-2 py-1">Restore</button>
@@ -2124,6 +2164,7 @@ function App() {
                 <h3 className="font-semibold">{isEditingGoal ? 'Edit Goal' : 'Create Goal'}</h3>
                 <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Name" value={goalDraft.name} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} />
                 <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Category" value={goalDraft.category} onChange={(e) => setGoalDraft({ ...goalDraft, category: e.target.value })} />
+                <GoalTimingFields goal={goalDraft} onChange={(updates) => setGoalDraft({ ...goalDraft, ...updates })} />
                 <textarea className="w-full rounded-lg border border-slate-300 p-2" rows={3} placeholder="Description" value={goalDraft.description} onChange={(e) => setGoalDraft({ ...goalDraft, description: e.target.value })} />
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.currentProgress} onChange={(e) => setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) })} />
@@ -2150,6 +2191,7 @@ function App() {
                         <div>
                           <h4 className="font-semibold">{goal.name}</h4>
                           <p className="text-sm text-slate-600">{goal.category} • {goal.status}</p>
+                          <GoalTimingSummary goal={goal} />
                         </div>
                         <div className="flex flex-wrap gap-2 text-sm">
                           <button onClick={() => editGoal(goal)} className="rounded bg-slate-100 px-2 py-1">Edit</button>
