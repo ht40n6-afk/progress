@@ -279,8 +279,9 @@ function normalizeReward(rawReward) {
     id: rawReward.id || safeId(),
     title: typeof rawReward.title === 'string' ? rawReward.title : 'Untitled reward',
     description: typeof rawReward.description === 'string' ? rawReward.description : '',
-    unlockType: rawReward.unlockType === 'task' ? 'task' : 'level',
-    requiredLevel: rawReward.unlockType === 'task' ? null : (Number(rawReward.requiredLevel) >= 1 ? Number(rawReward.requiredLevel) : 1),
+    unlockType: ['task', 'goal'].includes(rawReward.unlockType) ? rawReward.unlockType : 'level',
+    requiredLevel: ['task', 'goal'].includes(rawReward.unlockType) ? null : (Number(rawReward.requiredLevel) >= 1 ? Number(rawReward.requiredLevel) : 1),
+    linkedGoalId: typeof rawReward.linkedGoalId === 'string' ? rawReward.linkedGoalId : null,
     linkedTaskId: typeof rawReward.linkedTaskId === 'string' ? rawReward.linkedTaskId : null,
     linkedTaskDate: typeof rawReward.linkedTaskDate === 'string' ? rawReward.linkedTaskDate : null,
     claimed: Boolean(rawReward.claimed),
@@ -582,6 +583,7 @@ function App() {
   const [rewardRequiredLevelInput, setRewardRequiredLevelInput] = useState(1)
   const [editingRewardId, setEditingRewardId] = useState(null)
   const [rewardUnlockType, setRewardUnlockType] = useState('level')
+  const [rewardLinkedGoalId, setRewardLinkedGoalId] = useState('')
   const [rewardLinkedTaskKey, setRewardLinkedTaskKey] = useState('')
   const [rewardImageData, setRewardImageData] = useState(null)
   const [removeRewardImage, setRemoveRewardImage] = useState(false)
@@ -1315,6 +1317,9 @@ function App() {
 
   const isRewardUnlocked = (reward, sourceData, currentLevel) => {
     if (reward.claimed) return true
+    if (reward.unlockType === 'goal') {
+      return Boolean(sourceData?.goals?.some((goal) => goal.id === reward.linkedGoalId && goal.status === 'Completed'))
+    }
     if (reward.unlockType === 'task') {
       const task = findTaskByIdAndDate(sourceData, reward.linkedTaskId, reward.linkedTaskDate)
       return Boolean(task?.completed)
@@ -1357,12 +1362,14 @@ function App() {
 
   const addOrUpdateReward = () => {
     if (!rewardTitleInput.trim()) return
+    if (rewardUnlockType === 'goal' && !data.goals.some((goal) => goal.id === rewardLinkedGoalId)) return
     const payload = {
       id: editingRewardId || safeId(),
       title: rewardTitleInput.trim(),
       description: rewardDescriptionInput.trim(),
-      unlockType: rewardUnlockType === 'task' ? 'task' : 'level',
-      requiredLevel: rewardUnlockType === 'task' ? null : Math.max(1, Number(rewardRequiredLevelInput) || 1),
+      unlockType: ['task', 'goal'].includes(rewardUnlockType) ? rewardUnlockType : 'level',
+      requiredLevel: ['task', 'goal'].includes(rewardUnlockType) ? null : Math.max(1, Number(rewardRequiredLevelInput) || 1),
+      linkedGoalId: rewardUnlockType === 'goal' ? rewardLinkedGoalId : null,
       linkedTaskId: rewardUnlockType === 'task' ? (rewardLinkedTaskKey.split('|')[0] || null) : null,
       linkedTaskDate: rewardUnlockType === 'task' ? (rewardLinkedTaskKey.split('|')[1] || null) : null,
       claimed: false,
@@ -1384,6 +1391,7 @@ function App() {
     setRewardRequiredLevelInput(1)
     setEditingRewardId(null)
     setRewardUnlockType('level')
+    setRewardLinkedGoalId('')
     setRewardLinkedTaskKey('')
     setRewardImageData(null)
     setRemoveRewardImage(false)
@@ -1395,6 +1403,7 @@ function App() {
     setRewardDescriptionInput(reward.description || '')
     setRewardRequiredLevelInput(reward.requiredLevel || 1)
     setRewardUnlockType(reward.unlockType || 'level')
+    setRewardLinkedGoalId(reward.linkedGoalId || '')
     setRewardLinkedTaskKey(reward.linkedTaskId && reward.linkedTaskDate ? `${reward.linkedTaskId}|${reward.linkedTaskDate}` : '')
     setRewardImageData(reward.imageData || null)
     setRemoveRewardImage(false)
@@ -1417,6 +1426,7 @@ function App() {
       setRewardDescriptionInput('')
       setRewardRequiredLevelInput(1)
       setRewardUnlockType('level')
+      setRewardLinkedGoalId('')
       setRewardLinkedTaskKey('')
       setRewardImageData(null)
       setRemoveRewardImage(false)
@@ -1924,9 +1934,16 @@ function App() {
                   <select value={rewardUnlockType} onChange={(e) => setRewardUnlockType(e.target.value)} className="rounded-lg border border-slate-300 p-2">
                     <option value="level">By level</option>
                     <option value="task">By task completion</option>
+                    <option value="goal">By goal completion</option>
                   </select>
                   {rewardUnlockType === 'level' ? (
                     <input type="number" min="1" value={rewardRequiredLevelInput} onChange={(e) => setRewardRequiredLevelInput(e.target.value)} className="rounded-lg border border-slate-300 p-2" placeholder="Required level" />
+                  ) : rewardUnlockType === 'goal' ? (
+                    <select aria-label="Linked goal" value={rewardLinkedGoalId} onChange={(e) => setRewardLinkedGoalId(e.target.value)} className="min-w-0 rounded-lg border border-slate-300 p-2">
+                      <option value="">Select linked goal</option>
+                      {rewardLinkedGoalId && !data.goals.some((goal) => goal.id === rewardLinkedGoalId) ? <option value={rewardLinkedGoalId}>Linked goal not found — choose another</option> : null}
+                      {data.goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.name} ({goal.status})</option>)}
+                    </select>
                   ) : (
                     <select value={rewardLinkedTaskKey} onChange={(e) => setRewardLinkedTaskKey(e.target.value)} className="rounded-lg border border-slate-300 p-2">
                       <option value="">Select linked task</option>
@@ -1934,16 +1951,17 @@ function App() {
                     </select>
                   )}
                   <input type="file" accept="image/*" onChange={handleRewardImageChange} className="w-full sm:w-auto rounded-lg border border-slate-300 p-2 text-sm" />
-                  <button onClick={addOrUpdateReward} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{editingRewardId ? 'Save reward' : 'Add reward'}</button>
+                  <button onClick={addOrUpdateReward} disabled={rewardUnlockType === 'goal' && !data.goals.some((goal) => goal.id === rewardLinkedGoalId)} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{editingRewardId ? 'Save reward' : 'Add reward'}</button>
                 </div>
                 {rewardUnlockType === 'task' && rewardTaskOptions.length === 0 && <p className="text-xs text-slate-500">Create a Daily Plan task first.</p>}
+                {rewardUnlockType === 'goal' && <p className="text-xs text-slate-500">{data.goals.length ? 'Choose a goal. The reward unlocks when its status is Completed.' : 'Create a goal first.'}</p>}
                 {rewardImageData && (
                   <div className="flex items-center gap-3">
                     <img src={rewardImageData} alt="Reward preview" className="h-16 w-24 rounded object-cover" />
                     <button onClick={() => { setRewardImageData(null); setRemoveRewardImage(true) }} className="rounded bg-rose-100 px-2 py-1 text-sm text-rose-700">Remove image</button>
                   </div>
                 )}
-                {editingRewardId && <button onClick={() => { setEditingRewardId(null); setRewardTitleInput(''); setRewardDescriptionInput(''); setRewardRequiredLevelInput(1); setRewardUnlockType('level'); setRewardLinkedTaskKey(''); setRewardImageData(null); setRemoveRewardImage(false) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
+                {editingRewardId && <button onClick={() => { setEditingRewardId(null); setRewardTitleInput(''); setRewardDescriptionInput(''); setRewardRequiredLevelInput(1); setRewardUnlockType('level'); setRewardLinkedTaskKey(''); setRewardLinkedGoalId(''); setRewardImageData(null); setRemoveRewardImage(false) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
               </div>
 
               <RewardGroup title="Available to claim" rewards={availableRewards} level={level} data={data} getRewardStatus={getRewardStatus} isRewardUnlocked={isRewardUnlocked} findTaskByIdAndDate={findTaskByIdAndDate} onEdit={startEditReward} onClaim={claimReward} onDelete={deleteReward} />
@@ -2378,6 +2396,7 @@ function RewardGroup({ title, rewards, level, data, getRewardStatus, isRewardUnl
           const unlocked = isRewardUnlocked(reward, data, level)
           const status = getRewardStatus(reward, data, level)
           const linkedTask = reward.unlockType === 'task' ? findTaskByIdAndDate(data, reward.linkedTaskId, reward.linkedTaskDate) : null
+          const linkedGoal = reward.unlockType === 'goal' ? data.goals.find((goal) => goal.id === reward.linkedGoalId) : null
           return (
             <div key={reward.id} className={`rounded-lg border border-slate-200 p-3 text-sm ${claimed ? 'opacity-70' : ''}`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2387,7 +2406,10 @@ function RewardGroup({ title, rewards, level, data, getRewardStatus, isRewardUnl
                   ) : null}
                   <p className="font-semibold">{reward.title}</p>
                   <p className="text-slate-600">{safeText(reward.description)}</p>
-                  <p className="mt-1 text-xs text-slate-500">Unlock type: {reward.unlockType === 'task' ? 'Task completion' : 'Level based'}</p>
+                  <p className="mt-1 text-xs text-slate-500">Unlock type: {reward.unlockType === 'goal' ? 'Goal completion' : reward.unlockType === 'task' ? 'Task completion' : 'Level based'}</p>
+                  {reward.unlockType === 'goal' && <p className="mt-1 text-xs text-slate-500">Linked goal: {linkedGoal ? safeText(linkedGoal.name) : 'Linked goal not found. Edit the reward to choose another goal.'}</p>}
+                  {!reward.claimed && status === 'Locked' && reward.unlockType === 'goal' && linkedGoal && <p className="text-xs text-slate-500">Complete goal: {safeText(linkedGoal.name)}</p>}
+                  {!reward.claimed && status === 'Unlocked' && reward.unlockType === 'goal' && <p className="text-xs text-emerald-700">Unlocked by goal completion</p>}
                   {reward.unlockType === 'level' && <p className="mt-1 text-xs text-slate-500">Required level: {reward.requiredLevel}</p>}
                   {reward.unlockType === 'task' && <p className="mt-1 text-xs text-slate-500">Linked task: {linkedTask ? `${safeText(linkedTask.text)} (${reward.linkedTaskDate})` : 'Linked task not found.'}</p>}
                   {!reward.claimed && status === 'Locked' && reward.unlockType === 'level' && <p className="text-xs text-slate-500">Unlocks at Level {reward.requiredLevel}</p>}
