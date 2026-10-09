@@ -571,7 +571,7 @@ function ReminderControls({ task, onUpdate, disabled = false }) {
 
 function App() {
   const [data, setData] = useState(loadData)
-  const [activePage, setActivePage] = useState('dashboard')
+  const [activePage, setActivePage] = useState('today')
   const [goalDraft, setGoalDraft] = useState(createEmptyGoal)
   const [isEditingGoal, setIsEditingGoal] = useState(false)
   const [achievementInput, setAchievementInput] = useState('')
@@ -591,7 +591,6 @@ function App() {
   const [planXpInput, setPlanXpInput] = useState(10)
   const [planTimeBlockInput, setPlanTimeBlockInput] = useState('Anytime')
 
-  const [dashboardEditingGoalId, setDashboardEditingGoalId] = useState(null)
 
   const today = todayString()
   const [selectedDate, setSelectedDate] = useState(today)
@@ -1581,7 +1580,7 @@ function App() {
     localStorage.removeItem(SENT_REMINDERS_KEY)
     const fresh = loadData()
     setData(fresh)
-    setActivePage('dashboard')
+    setActivePage('today')
     setBackupError('')
   }
 
@@ -1633,66 +1632,27 @@ function App() {
             <span className="rounded-full bg-indigo-100 px-4 py-2 font-semibold text-indigo-700">Total XP: {totalXP}</span>
             <span className="rounded-full bg-emerald-100 px-4 py-2 font-semibold text-emerald-700">Level: {level}</span>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              onClick={() => setActivePage('dashboard')}
-              className={`rounded-lg px-4 py-2 font-semibold ${activePage === 'dashboard' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => setActivePage('goals')}
-              className={`rounded-lg px-4 py-2 font-semibold ${activePage === 'goals' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`}
-            >
-              Goals Page
-            </button>
-            <button
-              onClick={() => setActivePage('settings')}
-              className={`rounded-lg px-4 py-2 font-semibold ${activePage === 'settings' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`}
-            >
-              Settings
-            </button>
-          </div>
+          <nav aria-label="Main navigation" className="mt-4 flex flex-wrap gap-2">
+            {[['today', 'Today'], ['goals', 'Goals'], ['progress', 'Progress'], ['rewards', 'Rewards'], ['settings', 'Settings']].map(([page, label]) => (
+              <button key={page} type="button" onClick={() => setActivePage(page)} aria-current={activePage === page ? 'page' : undefined} className={`rounded-lg px-4 py-2 font-semibold ${activePage === page ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`}>
+                {label}
+              </button>
+            ))}
+          </nav>
         </header>
 
-        {activePage === 'dashboard' && (
-          <div className="grid grid-cols-1 gap-4 lg:gap-6 xl:grid-cols-2">
-            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">1. Today Entry ({selectedDate})</h2><input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full sm:w-auto rounded-lg border border-slate-300 p-2 text-sm" /></div>
-              <div className="mt-4 space-y-4">
-                {data.entryBlocks.map((block) => {
-                  const value = getEntryBlockValue(todayEntry, block)
-
-                  if (block.type === 'list') {
-                    return (
-                      <DynamicListBlock
-                        key={block.id}
-                        title={block.title}
-                        xpText={blockXpLabel(block)}
-                        items={value}
-                        onAdd={(itemText) => addEntryBlockListItem(block.id, itemText)}
-                        onRemove={(indexToRemove) => removeEntryBlockListItem(block.id, indexToRemove)}
-                      />
-                    )
-                  }
-
-                  return (
-                    <div key={block.id}>
-                      <label className="mb-1 block font-medium">{block.title} ({blockXpLabel(block)})</label>
-                      <textarea
-                        value={value}
-                        onChange={(e) => updateEntryBlockValue(block.id, e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 p-2"
-                        rows={3}
-                        placeholder={`Add ${block.title.toLowerCase()}`}
-                      />
-                    </div>
-                  )
-                })}
+        {activePage === 'today' && (
+          <div className="space-y-4 lg:space-y-6">
+            <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+              <div>
+                <h2 className="text-2xl font-semibold">Today</h2>
+                <p className="mt-1 text-sm text-slate-600">Choose what matters, plan your day, and make room to reflect.</p>
               </div>
-
+              <label className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                Selected date
+                <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="min-w-0 rounded-lg border border-slate-300 p-2" />
+              </label>
             </section>
-
             <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Daily Plan</h2>
               <p className="mt-1 text-sm text-slate-600">Plan tasks and intentions for {selectedDate}.</p>
@@ -1878,97 +1838,50 @@ function App() {
                 )}
               </div>
             </section>
-
             <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
-              <h2 className="text-xl font-semibold">2. Goals</h2>
-              <p className="mt-2 text-sm text-slate-600">Create, edit, and update goals directly from your dashboard.</p>
+              <details>
+                <summary className="cursor-pointer text-xl font-semibold">Reflect on today</summary>
+              <div className="mt-4 space-y-4">
+                {data.entryBlocks.map((block) => {
+                  const value = getEntryBlockValue(todayEntry, block)
 
-              <div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4">
-                <h3 className="font-semibold">{isEditingGoal ? 'Edit Goal' : 'Create Goal'}</h3>
-                <input className="w-full rounded-lg border border-slate-300 p-2" placeholder="Name" value={goalDraft.name} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} />
-                <GoalTimingFields goal={goalDraft} onChange={(updates) => setGoalDraft({ ...goalDraft, ...updates })} />
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Current progress" value={goalDraft.currentProgress} onChange={(e) => setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) })} />
-                  <input type="number" className="w-full rounded-lg border border-slate-300 p-2" placeholder="Target" value={goalDraft.targetProgress} onChange={(e) => setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) })} />
-                </div>
-                <select className="w-full rounded-lg border border-slate-300 p-2" value={goalDraft.status} onChange={(e) => setGoalDraft({ ...goalDraft, status: e.target.value, completedAt: e.target.value === 'Completed' ? selectedDate : null })}>
-                  <option>Not started</option>
-                  <option>In progress</option>
-                  <option>Completed</option>
-                  <option>Paused</option>
-                </select>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={saveGoal} className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white">{isEditingGoal ? 'Save Changes' : 'Add Goal'}</button>
-                  {isEditingGoal && <button onClick={() => { setGoalDraft(createEmptyGoal()); setIsEditingGoal(false) }} className="rounded-lg bg-slate-200 px-4 py-2">Cancel</button>}
-                </div>
-              </div>
+                  if (block.type === 'list') {
+                    return (
+                      <DynamicListBlock
+                        key={block.id}
+                        title={block.title}
+                        xpText={blockXpLabel(block)}
+                        items={value}
+                        onAdd={(itemText) => addEntryBlockListItem(block.id, itemText)}
+                        onRemove={(indexToRemove) => removeEntryBlockListItem(block.id, indexToRemove)}
+                      />
+                    )
+                  }
 
-              <div className="mt-4 space-y-3">
-                {activeGoals.map((goal) => {
-                  const percent = goal.targetProgress > 0 ? Math.min(100, Math.round((goal.currentProgress / goal.targetProgress) * 100)) : 0
-                  const isEditing = dashboardEditingGoalId === goal.id
                   return (
-                    <div key={goal.id} className="rounded-lg border border-slate-200 p-3 text-sm">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="w-full">
-                          {isEditing ? (
-                            <input className="w-full rounded border border-slate-300 p-1" value={goalDraft.name} onChange={(e) => setGoalDraft({ ...goalDraft, name: e.target.value })} />
-                          ) : (
-                            <p className="font-semibold">{goal.name}</p>
-                          )}
-                          <p className="text-slate-600">{goal.currentProgress}/{goal.targetProgress} • {goal.status}</p>
-                          <GoalTimingSummary goal={goal} />
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {isEditing ? (
-                            <button onClick={() => { saveGoal(); setDashboardEditingGoalId(null) }} className="rounded bg-indigo-600 px-2 py-1 text-white">Save</button>
-                          ) : (
-                            <button onClick={() => { editGoal(goal); setDashboardEditingGoalId(goal.id) }} className="rounded bg-slate-100 px-2 py-1">Edit</button>
-                          )}
-                          {goal.status !== 'Completed' ? (
-                            <button onClick={() => completeGoal(goal.id)} className="rounded bg-emerald-100 px-2 py-1 text-emerald-700">Complete</button>
-                          ) : (
-                            <button disabled className="rounded bg-emerald-50 px-2 py-1 text-emerald-400">Completed</button>
-                          )}
-                          <button onClick={() => deleteGoal(goal.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
-                        </div>
-                      </div>
-                      <ProgressBar percent={percent} />
-                      {isEditing ? <GoalTimingFields goal={goalDraft} onChange={(updates) => setGoalDraft({ ...goalDraft, ...updates })} /> : null}
-                      <div className="mt-2 grid grid-cols-3 gap-2">
-                        <input type="number" className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.currentProgress : goal.currentProgress} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, currentProgress: Number(e.target.value) }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, currentProgress: Number(e.target.value) } : g) })} />
-                        <input type="number" className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.targetProgress : goal.targetProgress} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, targetProgress: Number(e.target.value) }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, targetProgress: Number(e.target.value) } : g) })} />
-                        <select className="w-full rounded border border-slate-300 p-1" value={isEditing ? goalDraft.status : goal.status} onChange={(e) => isEditing ? setGoalDraft({ ...goalDraft, status: e.target.value, completedAt: e.target.value === 'Completed' ? selectedDate : null }) : updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, status: e.target.value, completedAt: e.target.value === 'Completed' ? selectedDate : null } : g) })}>
-                          <option>Not started</option><option>In progress</option><option>Completed</option><option>Paused</option>
-                        </select>
-                      </div>
+                    <div key={block.id}>
+                      <label className="mb-1 block font-medium">{block.title} ({blockXpLabel(block)})</label>
+                      <textarea
+                        value={value}
+                        onChange={(e) => updateEntryBlockValue(block.id, e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 p-2"
+                        rows={3}
+                        placeholder={`Add ${block.title.toLowerCase()}`}
+                      />
                     </div>
                   )
                 })}
-                {activeGoals.length === 0 && <p className="text-slate-500">No active goals. Complete archive below.</p>}              </div>
-            </section>
-
-            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
-              <h2 className="text-xl font-semibold">Completed Goals Archive</h2>
-              <div className="mt-4 space-y-3">
-                {completedGoals.map((goal) => (
-                  <div key={goal.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <p className="font-semibold">{goal.name}</p>
-                    <p className="text-slate-600">{goal.currentProgress}/{goal.targetProgress} • {goal.status}</p>
-                    <GoalTimingSummary goal={goal} />
-                    <p className="text-slate-500">Completed: {goal.completedAt || 'Unknown'}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button onClick={() => restoreGoal(goal.id)} className="rounded bg-slate-200 px-2 py-1">Restore</button>
-                      <button onClick={() => deleteGoal(goal.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
-                    </div>
-                  </div>
-                ))}
-                {completedGoals.length === 0 && <p className="text-slate-500">No completed goals yet.</p>}
               </div>
-            </section>
 
+              </details>
+            </section>
+          </div>
+        )}
+
+        {activePage === 'progress' && (
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-6">
             <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
-              <h2 className="text-xl font-semibold">3. Progress Dashboard</h2>
+              <h2 className="text-xl font-semibold">Progress</h2>
               <div className="mt-4 grid gap-3 text-sm">
                 <DashboardCard title="Total XP" value={`${totalXP} XP`} />
                 <DashboardCard title="Current Level" value={`Level ${level}`} />
@@ -1982,7 +1895,39 @@ function App() {
                 </DashboardCard>
               </div>
             </section>
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">History</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input type="date" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} className="w-full sm:w-auto rounded-lg border border-slate-300 p-2 text-sm" />
+              </div>
+              <div className="mt-4 rounded-lg border border-slate-200 p-3 text-sm">
+                {data.entries[historyDate] ? (
+                  <button
+                    type="button"
+                    onClick={() => openHistoryModal(historyDate)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHistoryModal(historyDate) } }}
+                    className="w-full rounded-lg border border-transparent p-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+                  >
+                    <p className="font-semibold">{historyDate} • XP: {calculateDayXP(historyDate, data).totalXP}</p>
+                    <div className="mt-2 space-y-1">
+                      {(data.entryBlocks || []).slice(0, 3).map((block) => {
+                        const blockValue = getHistoryBlockValue(data.entries[historyDate], block)
+                        const preview = block.type === 'list'
+                          ? (blockValue.length ? blockValue.slice(0, 2).join(', ') : 'Not provided')
+                          : safeText(blockValue)
+                        return <p key={block.id} className={`text-xs ${block.isPenalty ? 'text-rose-600' : 'text-slate-600'}`}><span className="font-semibold">{block.title}:</span> {preview}</p>
+                      })}
+                    </div>
+                    <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-indigo-600">View details →</p>
+                  </button>
+                ) : <p className="text-slate-500">No saved entry for this date.</p>}
+              </div>
+            </section>
+          </div>
+        )}
 
+        {activePage === 'rewards' && (
+          <div>
             <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Rewards</h2>
               <p className="mt-1 text-sm text-slate-600">Current Level: {level} · Rewards unlocked: {unlockedRewardsCount} / {(data.rewards || []).length}</p>
@@ -2026,35 +1971,6 @@ function App() {
               <RewardGroup title="Available to claim" rewards={availableRewards} level={level} data={data} getRewardStatus={getRewardStatus} isRewardUnlocked={isRewardUnlocked} findTaskByIdAndDate={findTaskByIdAndDate} onEdit={startEditReward} onClaim={claimReward} onDelete={deleteReward} />
               <RewardGroup title="Locked" rewards={lockedRewards} level={level} data={data} getRewardStatus={getRewardStatus} isRewardUnlocked={isRewardUnlocked} findTaskByIdAndDate={findTaskByIdAndDate} onEdit={startEditReward} onClaim={claimReward} onDelete={deleteReward} />
               <RewardGroup title="Claimed" rewards={claimedRewards} level={level} data={data} getRewardStatus={getRewardStatus} isRewardUnlocked={isRewardUnlocked} findTaskByIdAndDate={findTaskByIdAndDate} onEdit={startEditReward} onClaim={claimReward} onDelete={deleteReward} claimed />
-            </section>
-
-            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
-              <h2 className="text-xl font-semibold">4. History</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <input type="date" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} className="w-full sm:w-auto rounded-lg border border-slate-300 p-2 text-sm" />
-              </div>
-              <div className="mt-4 rounded-lg border border-slate-200 p-3 text-sm">
-                {data.entries[historyDate] ? (
-                  <button
-                    type="button"
-                    onClick={() => openHistoryModal(historyDate)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHistoryModal(historyDate) } }}
-                    className="w-full rounded-lg border border-transparent p-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
-                  >
-                    <p className="font-semibold">{historyDate} • XP: {calculateDayXP(historyDate, data).totalXP}</p>
-                    <div className="mt-2 space-y-1">
-                      {(data.entryBlocks || []).slice(0, 3).map((block) => {
-                        const blockValue = getHistoryBlockValue(data.entries[historyDate], block)
-                        const preview = block.type === 'list'
-                          ? (blockValue.length ? blockValue.slice(0, 2).join(', ') : 'Not provided')
-                          : safeText(blockValue)
-                        return <p key={block.id} className={`text-xs ${block.isPenalty ? 'text-rose-600' : 'text-slate-600'}`}><span className="font-semibold">{block.title}:</span> {preview}</p>
-                      })}
-                    </div>
-                    <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-indigo-600">View details →</p>
-                  </button>
-                ) : <p className="text-slate-500">No saved entry for this date.</p>}
-              </div>
             </section>
           </div>
         )}
@@ -2232,8 +2148,9 @@ function App() {
         )}
 
         {activePage === 'goals' && (
+          <div className="space-y-4 lg:space-y-6">
           <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
-            <h2 className="text-2xl font-semibold">Goals Page</h2>
+            <h2 className="text-2xl font-semibold">Goals</h2>
             <p className="mt-1 text-sm text-slate-600">Create, edit, and delete goals. Data is saved in localStorage.</p>
 
             <div className="mt-6 grid grid-cols-1 gap-4 lg:gap-6 xl:grid-cols-2">
@@ -2272,6 +2189,7 @@ function App() {
                         </div>
                         <div className="flex flex-wrap gap-2 text-sm">
                           <button onClick={() => editGoal(goal)} className="rounded bg-slate-100 px-2 py-1">Edit</button>
+                          <button onClick={() => completeGoal(goal.id)} className="rounded bg-emerald-100 px-2 py-1 text-emerald-700">Complete</button>
                           <button onClick={() => deleteGoal(goal.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
                         </div>
                       </div>
@@ -2280,13 +2198,45 @@ function App() {
                         <div className="h-3 rounded-full bg-indigo-500" style={{ width: `${percent}%` }} />
                       </div>
                       <p className="mt-1 text-sm">{goal.currentProgress} / {goal.targetProgress} ({percent}%)</p>
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <label className="text-xs text-slate-600">Current progress
+                          <input type="number" value={goal.currentProgress} onChange={(e) => updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, currentProgress: Number(e.target.value) } : g) })} className="mt-1 w-full min-w-0 rounded border border-slate-300 p-2 text-sm" />
+                        </label>
+                        <label className="text-xs text-slate-600">Target
+                          <input type="number" value={goal.targetProgress} onChange={(e) => updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, targetProgress: Number(e.target.value) } : g) })} className="mt-1 w-full min-w-0 rounded border border-slate-300 p-2 text-sm" />
+                        </label>
+                        <label className="text-xs text-slate-600">Status
+                          <select value={goal.status} onChange={(e) => updateData({ ...data, goals: data.goals.map((g) => g.id === goal.id ? { ...g, status: e.target.value, completedAt: e.target.value === 'Completed' ? selectedDate : null } : g) })} className="mt-1 w-full min-w-0 rounded border border-slate-300 p-2 text-sm">
+                            <option>Not started</option><option>In progress</option><option>Completed</option><option>Paused</option>
+                          </select>
+                        </label>
+                      </div>
                     </div>
                   )
                 })}
-                {data.goals.length === 0 && <p className="text-slate-500">No goals yet. Create your first goal.</p>}
+                {activeGoals.length === 0 && <p className="text-slate-500">{data.goals.length ? 'No active goals. Completed goals are below.' : 'No goals yet. Create your first goal.'}</p>}
               </div>
             </div>
           </section>
+            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
+              <h2 className="text-xl font-semibold">Completed Goals Archive</h2>
+              <div className="mt-4 space-y-3">
+                {completedGoals.map((goal) => (
+                  <div key={goal.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                    <p className="font-semibold">{goal.name}</p>
+                    <p className="text-slate-600">{goal.currentProgress}/{goal.targetProgress} • {goal.status}</p>
+                    <GoalTimingSummary goal={goal} />
+                    <p className="text-slate-500">Completed: {goal.completedAt || 'Unknown'}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button onClick={() => restoreGoal(goal.id)} className="rounded bg-slate-200 px-2 py-1">Restore</button>
+                      <button onClick={() => deleteGoal(goal.id)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700">Delete</button>
+                    </div>
+                  </div>
+                ))}
+                {completedGoals.length === 0 && <p className="text-slate-500">No completed goals yet.</p>}
+              </div>
+            </section>
+          </div>
         )}
 
         {selectedHistoryEntry && (
