@@ -1659,9 +1659,9 @@ function App() {
               <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50 p-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <h3 className="font-semibold text-indigo-950">What matters today?</h3>
-                  <span className="text-xs text-indigo-700">{dailyCommitmentTasks.length} of 3 commitments chosen</span>
+                  <span className="text-xs text-indigo-700">{dailyCommitmentTasks.length === 0 ? 'Choose your focus' : `${dailyCommitmentTasks.length} ${dailyCommitmentTasks.length === 1 ? 'commitment' : 'commitments'} chosen`}</span>
                 </div>
-                <p className="mt-1 text-sm text-slate-600">Choose up to three tasks to give your attention to. Fewer is fine; everything else can wait.</p>
+                <p className="mt-1 text-sm text-slate-600">Choose up to three things that matter today. One is enough.</p>
                 <div className="mt-3 space-y-2">
                   {dailyCommitmentTasks.map((task) => (
                     <div key={commitmentKey(task)} className="flex items-start gap-2 rounded-lg bg-white p-2">
@@ -1670,10 +1670,10 @@ function App() {
                         <p className={`break-words text-sm font-medium ${task.completed ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{task.text}</p>
                         <p className="text-xs text-slate-500">{task.category || 'Other'}{task.isRecurring ? ' · Recurring' : ''}{task.completed ? ' · Completed' : ''}</p>
                       </div>
-                      <button type="button" aria-label={`Remove commitment: ${task.text}`} onClick={() => toggleDailyCommitment(task)} className="shrink-0 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100">Remove</button>
+                      <button type="button" aria-label={`Remove from priorities: ${task.text}`} onClick={() => toggleDailyCommitment(task)} className="max-w-28 shrink-0 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100">Remove from priorities</button>
                     </div>
                   ))}
-                  {dailyCommitmentTasks.length === 0 ? <p className="text-sm text-slate-500">Use “Commit today” on a task below. There’s no need to fill every slot.</p> : null}
+                  {dailyCommitmentTasks.length === 0 ? <p className="text-sm text-slate-500">Use “Make a priority” on a task below.</p> : null}
                 </div>
                 {dailyCommitmentTasks.length >= 3 ? <p className="mt-2 text-xs text-indigo-700">To choose something else, remove a commitment first.</p> : null}
               </div>
@@ -1754,7 +1754,7 @@ function App() {
                       </div>
                       <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
                       <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-col">
-                        <button type="button" onClick={() => toggleDailyCommitment(task)} aria-pressed={dailyCommitmentKeys.includes(commitmentKey(task))} disabled={!dailyCommitmentKeys.includes(commitmentKey(task)) && dailyCommitmentKeys.length >= 3} className="flex-1 rounded bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-800 disabled:opacity-40 sm:flex-none">{dailyCommitmentKeys.includes(commitmentKey(task)) ? 'Uncommit' : 'Commit today'}</button>
+                        <button type="button" onClick={() => toggleDailyCommitment(task)} aria-pressed={dailyCommitmentKeys.includes(commitmentKey(task))} disabled={!dailyCommitmentKeys.includes(commitmentKey(task)) && dailyCommitmentKeys.length >= 3} className="flex-1 rounded bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-800 disabled:opacity-40 sm:flex-none">{dailyCommitmentKeys.includes(commitmentKey(task)) ? 'Remove from priorities' : 'Make a priority'}</button>
                         {!task.isRecurring ? (
                           <>
                             <button type="button" onClick={() => movePlanTask(task.id, -1)} disabled={!canMoveUp} className="flex-1 rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-40 sm:flex-none">↑ Up</button>
