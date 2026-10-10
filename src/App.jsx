@@ -569,6 +569,77 @@ function ReminderControls({ task, onUpdate, disabled = false }) {
   )
 }
 
+function PlanTaskCard({ task, categoryOptions, color, onToggle, onUpdate, onDelete, onMove, canMoveUp, canMoveDown, isPriority, priorityLimitReached, onPriority, onEditRecurring }) {
+  const [editing, setEditing] = useState(false)
+  const [showReminders, setShowReminders] = useState(false)
+  const category = categoryOptions.includes(task.category) ? task.category : 'Other'
+  const dueTime = normalizeDueTime(task.dueTime)
+  const offsets = normalizeReminderOffsets(task.reminderOffsets)
+  const reminderSummary = task.reminderEnabled
+    ? !dueTime ? 'Choose due time for reminders.'
+      : !offsets.length ? 'No reminder times selected'
+        : `Reminder ${offsets.map((offset) => offset === 0 ? `at ${dueTime}` : `${offset} min before ${dueTime}`).join(', ')}`
+    : dueTime ? `Due at ${dueTime}` : ''
+  const menuAction = (event, action) => {
+    event.currentTarget.closest('details')?.removeAttribute('open')
+    action()
+  }
+
+  return (
+    <div className="rounded-lg border border-l-4 border-slate-200 bg-white p-3" style={{ borderLeftColor: color }}>
+      <div className="flex items-start gap-3">
+        <input type="checkbox" aria-label={`${task.completed ? 'Reopen' : 'Complete'} task: ${task.text}`} checked={Boolean(task.completed)} onChange={onToggle} className="mt-1 h-5 w-5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className={`break-words font-semibold ${task.completed ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{task.text}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span className="rounded px-2 py-0.5 font-medium" style={{ backgroundColor: `${color}33`, color: '#1e293b' }}>{category}</span>
+            <span>{(task.timeBlock || 'Anytime').replace(' to ', '–')}</span>
+            {task.isRecurring ? <span>· Recurring</span> : null}
+            <span>· {taskXpValue(task)} XP</span>
+          </div>
+          {reminderSummary ? <p className={`mt-1 break-words text-xs ${task.reminderEnabled && !dueTime ? 'text-amber-700' : 'text-slate-600'}`}>{reminderSummary}</p> : null}
+          {task.comment ? <p className="mt-1 break-words text-xs text-slate-500">{task.comment}</p> : null}
+          <div className="mt-2 flex flex-wrap items-start gap-2">
+            {!task.completed ? <button type="button" onClick={onPriority} aria-pressed={isPriority} disabled={!isPriority && priorityLimitReached} className="rounded px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-40">{isPriority ? 'Remove from priorities' : 'Make a priority'}</button> : null}
+            <details className="min-w-0">
+              <summary aria-label={`Actions for ${task.text}`} className="cursor-pointer list-none rounded px-3 py-1 text-sm font-semibold text-slate-600 hover:bg-slate-100">⋯</summary>
+              <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
+                {task.isRecurring ? <button type="button" onClick={(e) => menuAction(e, onEditRecurring)} className="rounded bg-white px-3 py-2 text-indigo-700">Edit recurring task</button> : <>
+                  <button type="button" onClick={(e) => menuAction(e, () => setEditing(true))} className="rounded bg-white px-3 py-2">Edit</button>
+                  <button type="button" onClick={(e) => menuAction(e, () => setShowReminders((value) => !value))} className="rounded bg-white px-3 py-2">Reminder settings</button>
+                  {!task.completed ? <>
+                    <button type="button" disabled={!canMoveUp} onClick={(e) => menuAction(e, () => onMove(-1))} className="rounded bg-white px-3 py-2 disabled:opacity-40">Move up</button>
+                    <button type="button" disabled={!canMoveDown} onClick={(e) => menuAction(e, () => onMove(1))} className="rounded bg-white px-3 py-2 disabled:opacity-40">Move down</button>
+                  </> : null}
+                  <button type="button" onClick={(e) => menuAction(e, onDelete)} className="rounded bg-rose-50 px-3 py-2 text-rose-700">Delete</button>
+                </>}
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+      {editing && !task.isRecurring ? <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
+        <label className="block text-xs text-slate-600">Task name<input value={task.text} onChange={(e) => onUpdate({ text: e.target.value })} className="mt-1 w-full rounded border border-slate-300 p-2 text-sm" /></label>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <label className="min-w-0 text-xs text-slate-600">Category<select value={category} onChange={(e) => onUpdate({ category: e.target.value })} className="mt-1 w-full min-w-0 rounded border border-slate-300 p-2 text-sm">{categoryOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <label className="min-w-0 text-xs text-slate-600">Time block<select value={task.timeBlock || 'Anytime'} onChange={(e) => onUpdate({ timeBlock: e.target.value })} className="mt-1 w-full min-w-0 rounded border border-slate-300 p-2 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select></label>
+          <label className="min-w-0 text-xs text-slate-600">XP<input type="number" min="0" value={taskXpValue(task)} onChange={(e) => onUpdate({ xp: Math.max(0, Number(e.target.value) || 0) })} className="mt-1 w-full min-w-0 rounded border border-slate-300 p-2 text-sm" /></label>
+        </div>
+        <label className="block text-xs text-slate-600">Comment<textarea value={task.comment || ''} onChange={(e) => onUpdate({ comment: e.target.value })} rows={2} className="mt-1 w-full rounded border border-slate-300 p-2 text-sm" /></label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" aria-expanded={showReminders} onClick={() => setShowReminders((value) => !value)} className="rounded bg-slate-100 px-3 py-2 text-xs">{showReminders ? 'Hide reminder settings' : 'Reminder settings'}</button>
+          <button type="button" onClick={() => setEditing(false)} className="rounded bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">Done editing</button>
+          <span className="text-xs text-slate-500">Changes save automatically.</span>
+        </div>
+      </div> : null}
+      {showReminders && !task.isRecurring ? <div className="mt-3 border-t border-slate-200 pt-3">
+        <ReminderControls task={task} onUpdate={onUpdate} />
+        <button type="button" onClick={() => setShowReminders(false)} className="mt-2 rounded bg-slate-100 px-3 py-2 text-xs">Close reminder settings</button>
+      </div> : null}
+    </div>
+  )
+}
+
 function App() {
   const [data, setData] = useState(loadData)
   const [activePage, setActivePage] = useState('today')
@@ -622,7 +693,6 @@ function App() {
   const [localLastModifiedAt, setLocalLastModifiedAt] = useState(new Date().toISOString())
   const [autoSyncStatus, setAutoSyncStatus] = useState('Idle')
   const [cloudNewerPrompt, setCloudNewerPrompt] = useState(null)
-  const [openTaskCommentEditors, setOpenTaskCommentEditors] = useState({})
   const emptyRecurringTaskDraft = () => ({ text: '', category: 'Other', xp: 10, timeBlock: 'Anytime', dueTime: '', reminderEnabled: false, reminderOffsets: [], recurrenceType: 'daily', daysOfWeek: ['Monday'], active: true })
   const [recurringTaskDraft, setRecurringTaskDraft] = useState(emptyRecurringTaskDraft)
   const [editingRecurringTaskId, setEditingRecurringTaskId] = useState(null)
@@ -1513,6 +1583,14 @@ function App() {
     updateData({ ...data, entryBlocks: blocks.filter((block) => block.id !== blockId) })
   }
 
+  const editRecurringTaskFromPlan = (task) => {
+    const template = (data.recurringTasks || []).find((item) => item.id === task.id)
+    if (!template) return
+    setRecurringTaskDraft({ ...template })
+    setEditingRecurringTaskId(template.id)
+    setActivePage('settings')
+  }
+
   const saveRecurringTask = () => {
     if (!recurringTaskDraft.text.trim()) return
     const normalized = {
@@ -1623,6 +1701,13 @@ function App() {
     return () => window.removeEventListener("keydown", handleEsc)
   }, [selectedHistoryEntry])
 
+  useEffect(() => {
+    if (activePage !== 'settings' || !editingRecurringTaskId) return
+    const section = document.getElementById('recurring-task-settings')
+    section?.focus({ preventScroll: true })
+    section?.scrollIntoView({ block: 'start' })
+  }, [activePage, editingRecurringTaskId])
+
   return (    <div className="min-h-screen bg-slate-50 p-3 sm:p-4 lg:p-6 text-slate-800">
       <div className="mx-auto max-w-6xl space-y-4 lg:space-y-6 overflow-x-hidden">
         <header className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
@@ -1698,72 +1783,24 @@ function App() {
 
               <div className="mt-4 space-y-2">
                 {activePlanTasks.map((task) => {
-                  const manualIndex = task.isRecurring ? -1 : activeManualPlanTasks.findIndex((manualTask) => manualTask.id === task.id)
-                  const canMoveUp = manualIndex > 0
-                  const canMoveDown = manualIndex >= 0 && manualIndex < activeManualPlanTasks.length - 1
-                  const taskCategoryColor = categoryColorFor(categoryOptions.includes(task.category) ? task.category : 'Other', taskCategoryColors)
-
+                  const manualIndex = task.isRecurring ? -1 : activeManualPlanTasks.findIndex((item) => item.id === task.id)
                   return (
-                    <div
-                      key={task.id}
-                      className={`flex flex-col items-stretch gap-2 rounded-lg border border-l-4 border-slate-200 p-2 sm:flex-row sm:items-center ${task.completed ? 'opacity-60' : ''}`}
-                      style={{ backgroundColor: taskCategoryColor, borderLeftColor: taskCategoryColor }}
-                    >
-                      <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
-                      <div className="w-full min-w-0 space-y-1">
-                        <div className="flex flex-wrap gap-1">
-                          <span className="inline-block rounded border border-white/70 bg-white/70 px-2 py-0.5 text-xs font-semibold text-slate-700">{categoryOptions.includes(task.category) ? task.category : 'Other'}</span>
-                          {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
-                        </div>
-                        <input
-                          value={task.text}
-                          onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
-                          disabled={Boolean(task.isRecurring)}
-                          className={`w-full rounded border border-slate-300 p-1 ${task.completed ? 'line-through' : ''}`}
-                        />
-                        {task.comment ? <p className="text-xs text-slate-500 line-clamp-2">{task.comment}</p> : null}
-                        {!task.isRecurring ? (
-                          <div>
-                            <button type="button" onClick={() => setOpenTaskCommentEditors((prev) => ({ ...prev, [task.id]: !prev[task.id] }))} className="text-xs text-indigo-600">
-                              {task.comment ? 'Edit comment' : 'Add comment'}
-                            </button>
-                            {openTaskCommentEditors[task.id] ? (
-                              <div className="mt-1 space-y-1">
-                                <textarea
-                                  value={typeof task.comment === 'string' ? task.comment : ''}
-                                  onChange={(e) => updatePlanTask(task.id, { comment: e.target.value })}
-                                  className="w-full rounded border border-slate-300 p-2 text-sm"
-                                  rows={2}
-                                  placeholder="Add task comment"
-                                />
-                                <button type="button" onClick={() => updatePlanTask(task.id, { comment: '' })} className="text-xs text-rose-600">Clear comment</button>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
-                          <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
-                          <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
-                          <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[80px] sm:w-[90px] rounded border border-slate-300 p-1 text-sm" />
-                        </div>
-                        <ReminderControls
-                          task={task}
-                          disabled={Boolean(task.isRecurring)}
-                          onUpdate={(updates) => updatePlanTask(task.id, updates)}
-                        />
-                      </div>
-                      <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
-                      <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-col">
-                        <button type="button" onClick={() => toggleDailyCommitment(task)} aria-pressed={dailyCommitmentKeys.includes(commitmentKey(task))} disabled={!dailyCommitmentKeys.includes(commitmentKey(task)) && dailyCommitmentKeys.length >= 3} className="flex-1 rounded bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-800 disabled:opacity-40 sm:flex-none">{dailyCommitmentKeys.includes(commitmentKey(task)) ? 'Remove from priorities' : 'Make a priority'}</button>
-                        {!task.isRecurring ? (
-                          <>
-                            <button type="button" onClick={() => movePlanTask(task.id, -1)} disabled={!canMoveUp} className="flex-1 rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-40 sm:flex-none">↑ Up</button>
-                            <button type="button" onClick={() => movePlanTask(task.id, 1)} disabled={!canMoveDown} className="flex-1 rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-40 sm:flex-none">↓ Down</button>
-                          </>
-                        ) : null}
-                        <button onClick={() => deletePlanTask(task.id)} disabled={Boolean(task.isRecurring)} className="flex-1 rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50 sm:flex-none">Delete</button>
-                      </div>
-                    </div>
+                    <PlanTaskCard
+                      key={`${selectedDate}:${commitmentKey(task)}`}
+                      task={task}
+                      categoryOptions={categoryOptions}
+                      color={categoryColorFor(categoryOptions.includes(task.category) ? task.category : 'Other', taskCategoryColors)}
+                      onToggle={() => task.isRecurring ? toggleRecurringTaskCompletion(selectedDate, task.id) : updatePlanTask(task.id, { completed: !task.completed })}
+                      onUpdate={(updates) => updatePlanTask(task.id, updates)}
+                      onDelete={() => deletePlanTask(task.id)}
+                      onMove={(direction) => movePlanTask(task.id, direction)}
+                      canMoveUp={manualIndex > 0}
+                      canMoveDown={manualIndex >= 0 && manualIndex < activeManualPlanTasks.length - 1}
+                      isPriority={dailyCommitmentKeys.includes(commitmentKey(task))}
+                      priorityLimitReached={dailyCommitmentKeys.length >= 3}
+                      onPriority={() => toggleDailyCommitment(task)}
+                      onEditRecurring={() => editRecurringTaskFromPlan(task)}
+                    />
                   )
                 })}
                 {activePlanTasks.length === 0 && <p className="text-sm text-slate-500">No tasks planned yet.</p>}
@@ -1781,58 +1818,18 @@ function App() {
 
                 {showCompletedTasks && (
                   <div className="mt-3 space-y-2">
-                    {completedPlanTasks.map((task) => {
-                      const taskCategoryColor = categoryColorFor(categoryOptions.includes(task.category) ? task.category : 'Other', taskCategoryColors)
-
-                      return (
-                        <div
-                          key={task.id}
-                          className="flex items-center gap-2 rounded-lg border border-l-4 border-slate-200 p-2 opacity-70"
-                          style={{ backgroundColor: taskCategoryColor, borderLeftColor: taskCategoryColor }}
-                        >
-                          <input type="checkbox" checked={task.completed} onChange={() => togglePlanTask(task.id)} className="h-4 w-4" />
-                          <div className="w-full min-w-0 space-y-1">
-                            <div className="flex flex-wrap gap-1">
-                              <span className="inline-block rounded border border-white/70 bg-white/70 px-2 py-0.5 text-xs font-semibold text-slate-700">{categoryOptions.includes(task.category) ? task.category : 'Other'}</span>
-                              {task.isRecurring ? <span className="inline-block rounded bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">Recurring</span> : null}
-                            </div>
-                          <input
-                            value={task.text}
-                            onChange={(e) => updatePlanTask(task.id, { text: e.target.value })}
-                            disabled={Boolean(task.isRecurring)}
-                            className="w-full rounded border border-slate-300 p-1 line-through"
-                          />
-                          {task.comment ? <p className="text-xs text-slate-500 line-clamp-2">{task.comment}</p> : null}
-                          {!task.isRecurring ? (
-                            <div>
-                              <button type="button" onClick={() => setOpenTaskCommentEditors((prev) => ({ ...prev, [task.id]: !prev[task.id] }))} className="text-xs text-indigo-600">
-                                {task.comment ? 'Edit comment' : 'Add comment'}
-                              </button>
-                              {openTaskCommentEditors[task.id] ? (
-                                <div className="mt-1 space-y-1">
-                                  <textarea
-                                    value={typeof task.comment === 'string' ? task.comment : ''}
-                                    onChange={(e) => updatePlanTask(task.id, { comment: e.target.value })}
-                                    className="w-full rounded border border-slate-300 p-2 text-sm"
-                                    rows={2}
-                                    placeholder="Add task comment"
-                                  />
-                                  <button type="button" onClick={() => updatePlanTask(task.id, { comment: '' })} className="text-xs text-rose-600">Clear comment</button>
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : null}
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.2fr_90px]">
-                            <select value={categoryOptions.includes(task.category) ? task.category : 'Other'} onChange={(e) => updatePlanTask(task.id, { category: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select>
-                            <select value={TIME_BLOCKS.includes(task.timeBlock) ? task.timeBlock : 'Anytime'} onChange={(e) => updatePlanTask(task.id, { timeBlock: e.target.value })} className="rounded border border-slate-300 p-1 text-sm">{TIME_BLOCKS.map((block) => <option key={block}>{block}</option>)}</select>
-                            <input type="number" min="0" value={Number(task.xp) >= 0 ? task.xp : 10} onChange={(e) => updatePlanTask(task.id, { xp: Math.max(0, Number(e.target.value) || 0) })} className="w-[80px] sm:w-[90px] rounded border border-slate-300 p-1 text-sm" />
-                          </div>
-                        </div>
-                        <span className="text-xs font-semibold text-indigo-600">{taskXpValue(task)} XP</span>
-                          <button onClick={() => deletePlanTask(task.id)} disabled={Boolean(task.isRecurring)} className="w-full sm:w-auto rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-50">Delete</button>
-                        </div>
-                      )
-                    })}
+                    {completedPlanTasks.map((task) => (
+                      <PlanTaskCard
+                        key={`${selectedDate}:${commitmentKey(task)}`}
+                        task={task}
+                        categoryOptions={categoryOptions}
+                        color={categoryColorFor(categoryOptions.includes(task.category) ? task.category : 'Other', taskCategoryColors)}
+                        onToggle={() => task.isRecurring ? toggleRecurringTaskCompletion(selectedDate, task.id) : updatePlanTask(task.id, { completed: !task.completed })}
+                        onUpdate={(updates) => updatePlanTask(task.id, updates)}
+                        onDelete={() => deletePlanTask(task.id)}
+                        onEditRecurring={() => editRecurringTaskFromPlan(task)}
+                      />
+                    ))}
                     {completedPlanTasks.length === 0 && <p className="text-sm text-slate-500">No completed tasks yet.</p>}
                   </div>
                 )}
@@ -2095,8 +2092,8 @@ function App() {
               </div>
             </section>
 
-            <section className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm xl:col-span-2">
-              <h2 className="text-xl font-semibold">Recurring Tasks</h2>
+            <section id="recurring-task-settings" tabIndex={-1} aria-labelledby="recurring-task-heading" className="rounded-2xl bg-white p-4 sm:p-5 lg:p-6 shadow-sm xl:col-span-2">
+              <h2 id="recurring-task-heading" className="text-xl font-semibold">Recurring Tasks</h2>
               <p className="mt-1 text-sm text-slate-600">Create tasks that auto-appear on matching days in Daily Plan.</p>
               <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm space-y-2">
                 <input value={recurringTaskDraft.text} onChange={(e) => setRecurringTaskDraft({ ...recurringTaskDraft, text: e.target.value })} className="w-full rounded border border-slate-300 p-2" placeholder="Task name" />
@@ -2122,6 +2119,7 @@ function App() {
                   </div>
                 )}
                 <button onClick={saveRecurringTask} className="rounded bg-indigo-600 px-3 py-2 text-white">{editingRecurringTaskId ? 'Save recurring task' : 'Add recurring task'}</button>
+                {editingRecurringTaskId ? <button type="button" onClick={() => { setRecurringTaskDraft(emptyRecurringTaskDraft()); setEditingRecurringTaskId(null) }} className="ml-2 rounded bg-slate-200 px-3 py-2">Cancel editing</button> : null}
                 {(data.recurringTasks || []).map((task) => (
                   <div key={task.id} className="rounded border border-slate-200 bg-white p-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
